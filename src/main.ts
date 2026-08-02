@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createLibraryScene } from './scene/loadLibraryScene';
 import './style.css';
 
 // --- Renderer ---
@@ -14,14 +16,21 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   200,
 );
-camera.position.set(0, 12, 14);
-camera.lookAt(0, 0, 0);
+camera.position.set(0, 18, 22);
+camera.lookAt(0, 0, -3);
 
-// --- Scene (D2 will populate: LibraryView / PlayerView / NpcView / SpotView) ---
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xfdf6e3);
-scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-scene.add(new THREE.HemisphereLight(0xffffff, 0xa08060, 0.4));
+// --- Scene ---
+const { scene, update } = createLibraryScene();
+
+// --- OrbitControls (dev inspection; removable before ship) ---
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 4;
+controls.maxDistance = 60;
+controls.maxPolarAngle = Math.PI / 2 - 0.05;
+controls.target.set(0, 0, -3);
+controls.update();
 
 // --- Resize ---
 window.addEventListener('resize', () => {
@@ -31,13 +40,14 @@ window.addEventListener('resize', () => {
 });
 
 // --- Game loop ---
-// dt is clamped so a tab-switch doesn't cause a huge physics/anim jump.
+// dt clamped so tab-switch won't cause physics/anim jumps.
 // D2 wiring: worldState = game.step(inputState, dt) -> sceneView.render(worldState)
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
-  void dt;
+  update(dt);
+  controls.update();
   renderer.render(scene, camera);
 }
 animate();

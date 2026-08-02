@@ -11,7 +11,7 @@ AI Browser Game Jam 4 参赛作品（2026-08-01 ~ 08-15）。完整设计见 `sp
 ## 技术栈
 
 - Vite + TypeScript + Three.js（无框架，纯代码驱动，无编辑器）
-- AI 3D 物料：Meshy 生成的 GLB（放 `assets/`，经 GLTFLoader 加载，`snippets/loadGlb.ts` 内的 `loadGlbNormalized` 归一化尺寸/落地）
+- AI 3D 物料：Meshy 生成的 GLB（放 `public/library/`，Vite 静态目录运行时通过 `library/<name>.glb` URL 加载，`snippets/loadGlb.ts` 内的 `loadGlbNormalized` 归一化尺寸/落地；dev/prod 路径一致）
 - 音乐/音效：Suno 生成 + 实地录环境音（放 `assets/audio/`）
 - 部署：itch.io 网页手动上传（`npm run pack` 产出 zip）
 
@@ -25,7 +25,8 @@ src/
   platform/  平台适配层：saveStore / audio / inputProvider / net（stretch 多人）
   main.ts    入口：渲染器、相机、主循环
 snippets/    可复用代码片段（loadGlb、sceneSwitcher、tween 等）
-assets/      模型/贴图/音频（GLB 走 CDN 友好路径，纹理 ≤2048px）
+public/library/   Meshy 生成的 GLB（Vite 静态目录，运行时 URL `library/<name>.glb`，dev/prod 一致）
+assets/      暂未使用（保留为未来贴图/音频沙盒）
 ```
 
 **核心数据流单向**：`platform/inputProvider` → `game.step(input, dt) → WorldState` → `scene/` 渲染 + `ui/` 渲染。`game/` 层完全不知 Three/DOM 存在。这是可测与可移植的根基。
