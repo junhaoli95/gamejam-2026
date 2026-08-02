@@ -2,41 +2,82 @@
 
 ## 项目背景
 
-AI Browser Game Jam 4 参赛练习项目（2026-08-01 ~ 08-15），赛后演进为「动物咖啡厅」放置类多人游戏。
-开发者是职业程序员、游戏开发新手，使用 AI 辅助编码（vibe coding）。
+AI Browser Game Jam 4 参赛作品（2026-08-01 ~ 08-15）。完整设计见 `spec/2026-08-01-1percent-battery-design.md`。
+
+- **本作(jam)**：《1% 电》(working title, "Low Battery")——顶视角 3D 探索生存小游戏。玩家是一只在图书馆只剩 1% 电的猫，3 分钟内冲到空充电桩保命，其他 NPC 动物也在抢桩；右下角 GTA5 式手机 UI，开地图/占用查询 app 帮你找桩，但 app 耗的就是你要保的电。冲刺抢桩耗能量 pip（局内不补，下局自动满）。
+- **赛后**：架构同一套纪律演进为「动物咖啡厅」放置类多人游戏（微信小程序）。本作保留可复用基建（Three.js pipeline、AABB 碰撞、程序动画、saveStore、Phone-UI overlay 技法、NPC 状态机框架→咖啡馆顾客 arrive/wait/leave）。
+- **开发者**：31 岁职业程序员、游戏开发新手，AI 辅助编码（vibe coding），全程在图书馆实地开发（见「参考资源」）。
 
 ## 技术栈
 
 - Vite + TypeScript + Three.js（无框架，纯代码驱动，无编辑器）
-- AI 3D 物料：Meshy 生成的 GLB（放 `assets/`，经 GLTFLoader 加载）
-- 音乐/音效：Suno 生成（放 `assets/audio/`）
+- AI 3D 物料：Meshy 生成的 GLB（放 `assets/`，经 GLTFLoader 加载，`snippets/loadGlb.ts` 内的 `loadGlbNormalized` 归一化尺寸/落地）
+- 音乐/音效：Suno 生成 + 实地录环境音（放 `assets/audio/`）
 - 部署：itch.io 网页手动上传（`npm run pack` 产出 zip）
 
 ## 架构纪律（为日后微信小游戏移植而设，必须遵守）
 
 ```
 src/
-  game/      纯 TS 游戏逻辑：顾客、经济、计时器。零 DOM、零 Three.js 依赖，可单测
+  game/      纯 TS 游戏逻辑：run/battery/npc/level/rng/输入抽象。零 DOM、零 Three.js 依赖，可单测
   scene/     Three.js 场景：只用 GLTFLoader / TextureLoader（微信适配层已验证的 loader）
-  ui/        DOM 界面层：只读游戏状态、只发用户意图。薄，可整体替换
-  platform/  平台适配层：存储/音频/网络各一个接口，游戏代码只依赖接口
+  ui/        DOM 界面层：只读游戏状态、只发用户意图。薄，可整体替换（Phone HUD / Top HUD / End Screens / Onboarding）
+  platform/  平台适配层：saveStore / audio / inputProvider / net（stretch 多人）
   main.ts    入口：渲染器、相机、主循环
 snippets/    可复用代码片段（loadGlb、sceneSwitcher、tween 等）
 assets/      模型/贴图/音频（GLB 走 CDN 友好路径，纹理 ≤2048px）
 ```
 
+**核心数据流单向**：`platform/inputProvider` → `game.step(input, dt) → WorldState` → `scene/` 渲染 + `ui/` 渲染。`game/` 层完全不知 Three/DOM 存在。这是可测与可移植的根基。
+
+## OpponentController 抽象（D2 即立，为多人 stretch 预留）
+
+`game/run.ts` 不知道"对手是 NPC 还是远程玩家"。统一抽象为 `OpponentController` 接口：
+
+```ts
+interface OpponentController {
+  kind: 'npc' | 'remote';
+  think(state: WorldState, dt: number): OpponentAction;
+}
+```
+
+- `NpcController`：D2-D10 实现的状态机（pick-target → move → occupy → leave → repeat）
+- `RemotePlayerController`：D11+ stretch 实现，从 `platform/net` 拿远端 action 喂入
+
+`game/` 逻辑零改即可支持真人多人。`main.ts` 装配时选 controller，单机=全 NpcController，online=对应位置换 RemotePlayerController，30 秒无匹配自动 fallback 到 NpcController（防 jam 评审干等）。
+
 ## 硬性规则
 
 1. **`game/` 里禁止 import three 或访问 DOM/window**——保证逻辑可移植、可测试
 2. 微信禁忌：纹理不得超过 2048px；模型统一 GLB 内嵌纹理；不用 ImageBitmapLoader
-3. 所有动画优先代码驱动（snippets/tween.ts），不依赖骨骼动画
-4. 场景默认无灯光——新场景必须显式加 AmbientLight + DirectionalLight
+3. 所有动画优先代码驱动（`snippets/tween.ts`：ease/bob/sway/pulse/popIn/damp），不依赖骨骼动画
+4. 场景默认无灯光——新场景必须显式加 AmbientLight（main.ts 已加）
 5. dt 一律 clamp（主循环已做 0.1s 上限），防止切后台后跳变
-6. 提交信息用英文，格式：`type: summary`（如 `feat: add customer spawner`）
+6. 提交信息用英文，格式：`type: summary`（如 `feat: add dash pip system`）
+7. **Git 工作流（PR-based，开发者铁律）**：
+   - AI 在 feature branch 上自由 commit，不再每次问用户
+   - 所有变更通过 Pull Request 进入 `main`，开发者 review 后 merge
+   - branch 命名：`feat/<x>` / `chore/<x>` / `fix/<x>`
+   - 完成后 `git push -u origin <branch>` → `gh pr create`
+   - 开发者在 GitHub 上 review + merge（推荐 squash & merge 保 main 历史线性）
+   - merge 后 AI 本地同步：`git switch main && git pull --ff-only`
+   - 每个 PR 必须自包含：build 通过、`game/` 单测通过（若涉及）、commit 信息清楚
+8. 守住 scoped 边界：单场景图书馆、玩家+2~3 NPC、2 app、3 pip。多场景/多 app/升级树/roguelike 树 全部是 stretch，D11+ 时间够才碰
 
-## AI 协作偏好（重要）
+## AI 协作偏好
 
-- **核心 gameplay 代码（game/ 目录）：先解释思路，给骨架，留关键逻辑让人类手写**——这是学习目标区
+- **核心 gameplay 代码（`game/` 目录）：先解释思路，给骨架，留关键逻辑让人类手写**——这是学习目标区
 - boilerplate / UI / 加载器 / 构建脚本：可以直接完整生成
 - 遇到 bug：先分析根因再改，不要无上下文地重写
-- 生成新文件前先检查 snippets/ 是否已有可复用实现
+- 生成新文件前先检查 `snippets/` 是否已有可复用实现
+- 手感相关数值（电池倍率、NPC 性格、移速、pip 数）全部入 `game/config.ts` 单一数据源，调平衡=改数字
+
+## 参考资源（实地优势）
+
+开发全程在图书馆实地进行，可即时观察：
+
+1. **真实插座分布与占用规律** → 桩位生成权重（不要均匀撒点，要像真的）
+2. **真人抢桩微行为（东张西望找座、看到别人起身立刻冲过来、占着桩低头玩手机不走、插队失败转身找下一个）** → NPC 状态机分支与延迟参数
+3. **暖光/冷光混搭 + 木地板/书架材质** → Three.js 灯光/材质 reference
+4. **过道/桌椅尺度** → 碰撞盒与俯视相机角度
+5. **实地录闭馆提示音/翻书/脚步/椅子拖动** → 原创音效（jam 评分"原创音频"加分项）
