@@ -4,7 +4,7 @@
 
 AI Browser Game Jam 4 参赛作品（2026-08-01 ~ 08-15）。完整设计见 `spec/2026-08-01-1percent-battery-design.md`。
 
-- **本作(jam)**：《1% 电》(working title, "Low Battery")——顶视角 3D 探索生存小游戏。玩家是一只在图书馆只剩 1% 电的猫，3 分钟内冲到空充电桩保命，其他 NPC 动物也在抢桩；右下角 GTA5 式手机 UI，开地图/占用查询 app 帮你找桩，但 app 耗的就是你要保的电。冲刺抢桩耗能量 pip（局内不补，下局自动满）。
+- **本作(jam)**：《1% 电》(working title, "Low Battery")——第三人称越肩 3D 探索生存小游戏。玩家是一只在图书馆只剩 1% 电的猫，3 分钟内冲到空充电桩保命，其他 NPC 动物也在抢桩；右下角 GTA5 式手机 UI，开地图/占用查询 app 帮你找桩，但 app 耗的就是你要保的电。冲刺抢桩耗能量 pip（局内不补，下局自动满）。
 - **赛后**：架构同一套纪律演进为「动物咖啡厅」放置类多人游戏（微信小程序）。本作保留可复用基建（Three.js pipeline、AABB 碰撞、程序动画、saveStore、Phone-UI overlay 技法、NPC 状态机框架→咖啡馆顾客 arrive/wait/leave）。
 - **开发者**：31 岁职业程序员、游戏开发新手，AI 辅助编码（vibe coding），全程在图书馆实地开发（见「参考资源」）。
 
@@ -60,10 +60,14 @@ interface OpponentController {
    - 所有变更通过 Pull Request 进入 `main`，开发者 review 后 merge
    - branch 命名：`feat/<x>` / `chore/<x>` / `fix/<x>`
    - 完成后 `git push -u origin <branch>` → `gh pr create`
-   - 开发者在 GitHub 上 review + merge（推荐 squash & merge 保 main 历史线性）
-   - merge 后 AI 本地同步：`git switch main && git pull --ff-only`
+   - 开发者在 GitHub 上 review + merge（推荐 rebase & merge 保留 AI 工作证据链；噪音分支才 squash）
+   - merge 后 AI 本地同步：`git switch main && git pull --ff-only`，并删除已 merge 的 feature 分支（本地+远程）
    - 每个 PR 必须自包含：build 通过、`game/` 单测通过（若涉及）、commit 信息清楚
+   - **一个功能增量 = 一个 PR**。AI 开完 PR 必须明确说 "READY FOR REVIEW" 并停手，不再往该分支 push（review 迭代的小修复除外，需在 PR 里说明）
+   - 任何 push 前先 `gh pr view <n> --json state` 确认 PR 仍 OPEN（防止往已 merge 分支续推的事故）
+   - commit 作者身份：仓库本地 `user.name="Kimi K3"`（与开发者本人区分；只设 repo-local，勿动全局配置）
 8. 守住 scoped 边界：单场景图书馆、玩家+2~3 NPC、2 app、3 pip。多场景/多 app/升级树/roguelike 树 全部是 stretch，D11+ 时间够才碰
+9. **调试资源闭环**：chrome-devtools MCP 验证（截图/console/模拟输入）完成后，立即杀掉 MCP chrome 进程与 dev server，并在回复中报告"已关"。开发者用电池供电，闲置 dev server 功耗 10w→40w，不允许挂后台
 
 ## AI 协作偏好
 
