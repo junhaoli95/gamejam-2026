@@ -7,9 +7,11 @@ import { loadGlbNormalized } from '../../snippets/loadGlb';
 // 实拍视频走线:走廊 → 书架区 → 窗边自习区。场景按此分三区:
 //   西(x<0)   书架区:3 排沿 Z 向书架,柱网 4 柱/排,每排抽一段当豁口(错位)
 //   中        走廊:x∈[-5.5, 6.4] 南北贯通,出生点在南端 (0, 8.5)
-//   东(x>0)   自习区:4 人桌矩阵(竖向相邻近/椅子可贴近,横向相邻远/边缘~2m)
-//             + 2 张窗边 2 人桌
+//   东(x>0)   自习区:4 人桌 2 列 × 10 行(纵向密排,横向边缘~2m)
+//             + 窗边 2 人桌 ×2;每桌 4 椅(长边两侧),~92% 座位坐占位猫,
+//             仅 7 个空位 —— "基本满座、一座难求"的实地氛围
 //   东墙      窗墙:发光面+竖梃,冷色 DirectionalLight 模拟日光
+//   四周      墙壁占位:古典深胡桃木色(碰撞由 controller 场地 clamp 承担)
 //
 // 电位宿主三种(视觉语言统一:"发光绿 = 可充电",全部立刻可见):
 //   1. 柱电位   —— 绿方块在柱 ±x 面低位
@@ -70,6 +72,10 @@ const END_BOX_ROWS = new Set([0, 2]);
 interface PoweredColumn { x: number; z: number; face: 1 | -1; }
 interface EndPanelBox { x: number; z: number; }
 
+// 自习区桌阵:2 列 × 10 行(实地观察:纵向非常多、横向只有两列)
+const STUDY_COL_XS = [7, 10.2];
+const STUDY_ROW_ZS = [-10.6, -8.24, -5.88, -3.52, -1.16, 1.2, 3.56, 5.92, 8.28, 10.64];
+
 function buildPlacements(): {
   placements: Placement[];
   poweredColumns: PoweredColumn[];
@@ -95,10 +101,8 @@ function buildPlacements(): {
     if (END_BOX_ROWS.has(ri)) endPanelBoxes.push({ x, z: COL_ZS[0] });
   });
 
-  // 自习区:4 人桌矩阵 —— 竖向(z)相邻近(1.0m 间隔,椅子可贴近),
-  // 横向(x)相邻远(中心距 3.2m = 边缘 2.0m)
-  const STUDY_COL_XS = [6, 9.2, 12.4];
-  const STUDY_ROW_ZS = [-8.1, -5.3, -2.5, 0.3];
+  // 自习区:4 人桌 2 列 × 10 行 —— 纵向密排(间距 0.56m,座椅肩并肩),
+  // 横向相邻远(中心距 3.2m = 边缘 2.0m)
   for (const x of STUDY_COL_XS) {
     for (const z of STUDY_ROW_ZS) {
       placements.push({ kind: 'studyTable', x, z });
@@ -107,10 +111,10 @@ function buildPlacements(): {
   placements.push(
     { kind: 'readingTable', x: 14.2, z: -6, rotY: Math.PI / 2 },
     { kind: 'readingTable', x: 14.2, z: -2, rotY: Math.PI / 2 },
-    // 壁插 ×3(南墙 2 + 西墙 1,常亮)
-    { kind: 'wallSocket', x: -8, z: 11.55 },
-    { kind: 'wallSocket', x:  8, z: 11.55 },
-    { kind: 'wallSocket', x: -15.55, z: 0, rotY: Math.PI / 2 },
+    // 壁插 ×3(贴墙面,南墙 2 + 西墙 1,常亮)
+    { kind: 'wallSocket', x: -8, z: 11.73 },
+    { kind: 'wallSocket', x: 14, z: 11.73 },
+    { kind: 'wallSocket', x: -15.73, z: 0, rotY: Math.PI / 2 },
   );
 
   return { placements, poweredColumns, endPanelBoxes };
@@ -129,6 +133,47 @@ export interface LibraryScene {
   /** 静态碰撞体(书架/柱/桌),玩家与相机共用。 */
   colliders: THREE.Box3[];
   update: (dt: number) => void;
+}
+
+/** 占位椅:座面 + 靠背(靠背在远离桌子一侧)。 */
+const chairMat = new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.7, metalness: 0 });
+function createChair(side: 1 | -1): THREE.Group {
+  const g = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), chairMat);
+  seat.position.y = 0.225;
+  g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.45), chairMat);
+  back.position.set(side * 0.24, 0.7, 0);
+  g.add(back);
+  return g;
+}
+
+/** 坐姿占位猫(省略眼/尾,背面视角为主):身体微压扁,五色皮毛轮换。 */
+const FUR_COLORS = [0xe8913a, 0x8a8a8a, 0x3a3a3a, 0xf0e6d2, 0x6b4a2a];
+const furMatCache = new Map<number, THREE.MeshStandardMaterial>();
+function furMat(color: number): THREE.MeshStandardMaterial {
+  let m = furMatCache.get(color);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0 });
+    furMatCache.set(color, m);
+  }
+  return m;
+}
+function createSeatedCat(furColor: number, rotY: number): THREE.Group {
+  const cat = new THREE.Group();
+  const fur = furMat(furColor);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.3, 4, 10), fur);
+  body.scale.y = 0.8;
+  body.position.y = 0.33;
+  cat.add(body);
+  for (const s of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 8), fur);
+    ear.position.set(0.13 * s, 0.62, 0);
+    ear.rotation.z = -0.18 * s;
+    cat.add(ear);
+  }
+  cat.rotation.y = rotY;
+  return cat;
 }
 
 /** 占位猫:胶囊身 + 圆锥耳 + 球眼 + 翘尾,面向 -z(书库深处)。 */
@@ -323,6 +368,84 @@ export function createLibraryScene(): LibraryScene {
       scene.add(sq);
     }
   }
+
+  // ── 座位:4 人桌每桌 4 椅(长边 ±x 两侧)+ 窗边桌每桌 2 椅;~92% 坐占位猫 ──
+  const SEAT_Z_OFFSETS = [-0.45, 0.45];
+  const SEAT_SIDE_X = 0.95;
+  // 空位("只有少量的几个位置"):key = col,row,si(si: 侧-1[zo-0.45=0, +0.45=1], 侧+1[2, 3])
+  const FREE_SEATS = new Set(['0,1,1', '0,4,0', '1,2,3', '1,6,0', '0,7,3', '1,8,2']);
+  let furIdx = 0;
+
+  for (const p of placements) {
+    if (p.kind === 'studyTable') {
+      const ci = STUDY_COL_XS.indexOf(p.x);
+      const ri = STUDY_ROW_ZS.indexOf(p.z);
+      let si = 0;
+      for (const side of [-1, 1] as const) {
+        for (const zo of SEAT_Z_OFFSETS) {
+          const sx = p.x + side * SEAT_SIDE_X;
+          const sz = p.z + zo;
+          const chair = createChair(side);
+          chair.position.set(sx, 0, sz);
+          scene.add(chair);
+          colliders.push(new THREE.Box3(
+            new THREE.Vector3(sx - 0.225, 0, sz - 0.225),
+            new THREE.Vector3(sx + 0.225, 0.9, sz + 0.225),
+          ));
+          if (!FREE_SEATS.has(`${ci},${ri},${si}`)) {
+            const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side * Math.PI / 2);
+            cat.position.set(sx, 0.45, sz);
+            scene.add(cat);
+          }
+          si++;
+        }
+      }
+    } else if (p.kind === 'readingTable') {
+      // 窗边 2 人桌:椅在西侧面向窗(+x);再留 1 个空位
+      for (const zo of SEAT_Z_OFFSETS) {
+        const sx = 13.5;
+        const sz = p.z + zo;
+        const chair = createChair(-1);
+        chair.position.set(sx, 0, sz);
+        scene.add(chair);
+        colliders.push(new THREE.Box3(
+          new THREE.Vector3(sx - 0.225, 0, sz - 0.225),
+          new THREE.Vector3(sx + 0.225, 0.9, sz + 0.225),
+        ));
+        const isFree = p.z === -2 && zo === 0.45;
+        if (!isFree) {
+          const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], -Math.PI / 2);
+          cat.position.set(sx, 0.45, sz);
+          scene.add(cat);
+        }
+      }
+    }
+  }
+
+  // ── 墙壁占位:古典深胡桃木色(视觉;碰撞由 controller 场地 clamp 承担)──
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.75, metalness: 0 });
+  const WALL_H = 3.2;
+  const WALL_T = 0.2;
+  const WALL_SEGMENTS: ReadonlyArray<readonly [number, number, number, number]> = [
+    // [cx, cz, w, d]
+    [0, -12 + WALL_T / 2, FLOOR_W, WALL_T],  // 北
+    [0, 12 - WALL_T / 2, FLOOR_W, WALL_T],   // 南
+    [-16 + WALL_T / 2, 0, WALL_T, FLOOR_D],  // 西
+    [16 - WALL_T / 2, 7.5, WALL_T, 9],       // 东-南段(窗 z∈[-9,3] 以南)
+    [16 - WALL_T / 2, -10.5, WALL_T, 3],     // 东-北段
+  ];
+  for (const [cx, cz, w, d] of WALL_SEGMENTS) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), wallMat);
+    wall.position.set(cx, WALL_H / 2, cz);
+    scene.add(wall);
+  }
+  // 窗下槛 + 窗上楣
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.8, 12), wallMat);
+  sill.position.set(15.9, 0.4, -3);
+  scene.add(sill);
+  const header = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.4, 12), wallMat);
+  header.position.set(15.9, 3.2, -3);
+  scene.add(header);
 
   const player = createPlaceholderCat();
   scene.add(player);
