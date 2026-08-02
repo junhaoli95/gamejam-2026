@@ -48,7 +48,10 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
 
   // 监听 window:遮罩层覆盖 canvas 时点击事件不会落到 dom 上
   window.addEventListener('click', () => {
-    if (document.pointerLockElement !== dom) dom.requestPointerLock();
+    if (document.pointerLockElement === dom) return;
+    // 非可信手势(自动化脚本点击)下 requestPointerLock 的 promise 会 reject,吞掉防噪音
+    const result = dom.requestPointerLock() as unknown;
+    if (result instanceof Promise) result.catch(() => {});
   });
   document.addEventListener('pointerlockchange', () => {
     overlay.style.display = document.pointerLockElement === dom ? 'none' : '';
