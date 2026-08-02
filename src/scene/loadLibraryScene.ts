@@ -7,13 +7,15 @@ import { loadGlbNormalized } from '../../snippets/loadGlb';
 // 实拍视频走线:走廊 → 书架区 → 窗边自习区。场景按此分三区:
 //   西(x<0)   书架区:3 排沿 Z 向书架,柱网 4 柱/排,每排抽一段当豁口(错位)
 //   中        走廊:x∈[-5.5, 6.4] 南北贯通,出生点在南端 (0, 8.5)
-//   东(x>0)   自习区:2 张长条共享桌(中线电位排 ×6)+ 2 张窗边 2 人桌
+//   东(x>0)   自习区:4 人桌矩阵(竖向相邻近/椅子可贴近,横向相邻远/边缘~2m)
+//             + 2 张窗边 2 人桌
 //   东墙      窗墙:发光面+竖梃,冷色 DirectionalLight 模拟日光
 //
-// 电位宿主三种(视觉语言统一:"发光绿 = 可充电"):
-//   1. 柱电位   —— 绿方块在柱 ±x 面低位,默认隐藏,走近 3.2m 显现(核心不确定性)
-//   2. 端板电位盒 —— 书架排北端柱面上的银灰盒,绿点同样走近显现
-//   3. 共享桌中线电位 —— 桌面常亮绿方块(开放视线,已知目标;占用玩法待 NPC)
+// 电位宿主三种(视觉语言统一:"发光绿 = 可充电",全部立刻可见):
+//   1. 柱电位   —— 绿方块在柱 ±x 面低位
+//   2. 端板电位盒 —— 书架排北端柱面上的银灰盒 + 绿点
+//   3. 4 人桌电位 —— 桌面中线 2 个绿方块
+// (曾实现"走近 3.2m 才显现",按 review 意见删除——不确定性改由占用状态承载)
 //
 // Model loading: placeholders occupy the floor layout immediately; if
 // `public/library/*.glb` exists, the GLB swaps in for the placeholder of
@@ -21,12 +23,12 @@ import { loadGlbNormalized } from '../../snippets/loadGlb';
 // reload the dev server — no code changes needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ModelKind = 'bookshelf' | 'column' | 'communalTable' | 'readingTable' | 'wallSocket';
+export type ModelKind = 'bookshelf' | 'column' | 'studyTable' | 'readingTable' | 'wallSocket';
 
 const MODEL_PATHS: Record<ModelKind, string> = {
   bookshelf:     'library/bookshelf.glb',
   column:        'library/column.glb',
-  communalTable: 'library/communalTable.glb',
+  studyTable:    'library/studyTable.glb',
   readingTable:  'library/readingTable.glb',
   wallSocket:    'library/wallSocket.glb',
 };
@@ -34,7 +36,7 @@ const MODEL_PATHS: Record<ModelKind, string> = {
 const MODEL_DIMS: Record<ModelKind, { w: number; h: number; d: number }> = {
   bookshelf:     { w: 3.0, h: 2.4,  d: 0.6 },
   column:        { w: 0.9, h: 3.4,  d: 0.9 },
-  communalTable: { w: 1.2, h: 0.75, d: 8.0 },
+  studyTable:    { w: 1.2, h: 0.75, d: 1.8 }, // 4 人桌,长边沿 z
   readingTable:  { w: 1.8, h: 0.75, d: 0.9 },
   wallSocket:    { w: 0.3, h: 0.5,  d: 0.12 },
 };
@@ -42,7 +44,7 @@ const MODEL_DIMS: Record<ModelKind, { w: number; h: number; d: number }> = {
 const PLACEHOLDER_COLOR: Record<ModelKind, number> = {
   bookshelf:     0xf0ede6, // 实拍:白钢架身
   column:        0xa8825c, // 实拍:木饰面方柱
-  communalTable: 0xb08c5e, // 实拍:浅木长桌
+  studyTable:    0xb08c5e, // 实拍:浅木桌
   readingTable:  0xb08c5e,
   wallSocket:    0x1a2a1a,
 };
@@ -93,10 +95,16 @@ function buildPlacements(): {
     if (END_BOX_ROWS.has(ri)) endPanelBoxes.push({ x, z: COL_ZS[0] });
   });
 
-  // 自习区:长条共享桌 ×2 + 窗边 2 人桌 ×2
+  // 自习区:4 人桌矩阵 —— 竖向(z)相邻近(1.0m 间隔,椅子可贴近),
+  // 横向(x)相邻远(中心距 3.2m = 边缘 2.0m)
+  const STUDY_COL_XS = [6, 9.2, 12.4];
+  const STUDY_ROW_ZS = [-8.1, -5.3, -2.5, 0.3];
+  for (const x of STUDY_COL_XS) {
+    for (const z of STUDY_ROW_ZS) {
+      placements.push({ kind: 'studyTable', x, z });
+    }
+  }
   placements.push(
-    { kind: 'communalTable', x: 7,  z: -3 },
-    { kind: 'communalTable', x: 12, z: -3 },
     { kind: 'readingTable', x: 14.2, z: -6, rotY: Math.PI / 2 },
     { kind: 'readingTable', x: 14.2, z: -2, rotY: Math.PI / 2 },
     // 壁插 ×3(南墙 2 + 西墙 1,常亮)
@@ -108,10 +116,9 @@ function buildPlacements(): {
   return { placements, poweredColumns, endPanelBoxes };
 }
 
-// 共享桌中线电位:每桌 6 个,沿长度均布(常亮;相对桌心的 z 偏移)
-const COMMUNAL_OUTLET_OFFSETS = [-3.5, -2.1, -0.7, 0.7, 2.1, 3.5];
+// 4 人桌电位:桌面中线 2 个(沿 z ±0.45)
+const STUDY_OUTLET_OFFSETS = [-0.45, 0.45];
 const COLUMN_OUTLET_Y = 0.35;
-const OUTLET_REVEAL_DIST = 3.2;
 
 const SPAWN = { x: 0, z: 8.5 };
 
@@ -232,7 +239,7 @@ export function createLibraryScene(): LibraryScene {
   (Object.keys(MODEL_PATHS) as ModelKind[]).forEach(k => placementsByKind.set(k, []));
 
   const colliders: THREE.Box3[] = [];
-  const COLLIDER_KINDS = new Set<ModelKind>(['bookshelf', 'column', 'communalTable', 'readingTable']);
+  const COLLIDER_KINDS = new Set<ModelKind>(['bookshelf', 'column', 'studyTable', 'readingTable']);
 
   const socketMat = new THREE.MeshStandardMaterial({
     color: PLACEHOLDER_COLOR.wallSocket,
@@ -283,20 +290,15 @@ export function createLibraryScene(): LibraryScene {
     metalness: 0,
   });
 
-  // 隐藏电位(柱面 + 端板盒):走近 OUTLET_REVEAL_DIST 才显现
-  interface HiddenOutlet { mesh: THREE.Mesh; x: number; z: number; }
-  const hiddenOutlets: HiddenOutlet[] = [];
-
+  // 柱电位:绿方块在柱 ±x 面低位,立刻可见
   const columnOutletGeo = new THREE.BoxGeometry(0.02, 0.25, 0.25);
   for (const c of poweredColumns) {
     const m = new THREE.Mesh(columnOutletGeo, outletMat);
     m.position.set(c.x + c.face * (MODEL_DIMS.column.w / 2 + 0.01), COLUMN_OUTLET_Y, c.z);
-    m.visible = false;
     scene.add(m);
-    hiddenOutlets.push({ mesh: m, x: c.x, z: c.z });
   }
 
-  // 端板电位盒:银灰盒常显(陈设),绿点隐藏
+  // 端板电位盒:银灰盒 + 绿点,立刻可见
   const endBoxGeo = new THREE.BoxGeometry(0.3, 0.4, 0.06);
   const endBoxMat = new THREE.MeshStandardMaterial({ color: 0xb8bcc0, roughness: 0.35, metalness: 0.6 });
   const endDotGeo = new THREE.BoxGeometry(0.15, 0.15, 0.02);
@@ -307,18 +309,16 @@ export function createLibraryScene(): LibraryScene {
     scene.add(boxMesh);
     const dot = new THREE.Mesh(endDotGeo, outletMat);
     dot.position.set(b.x, 1.2, northFaceZ - 0.06);
-    dot.visible = false;
     scene.add(dot);
-    hiddenOutlets.push({ mesh: dot, x: b.x, z: b.z - 1 });
   }
 
-  // 共享桌中线电位:常亮(独立于桌子 mesh,GLB swap 后仍在正确位置)
-  const communalOutletGeo = new THREE.BoxGeometry(0.2, 0.02, 0.2);
-  const tableH = MODEL_DIMS.communalTable.h;
+  // 4 人桌电位:桌面中线 2 个绿方块(独立于桌子 mesh,GLB swap 后仍在正确位置)
+  const studyOutletGeo = new THREE.BoxGeometry(0.2, 0.02, 0.2);
+  const tableH = MODEL_DIMS.studyTable.h;
   for (const p of placements) {
-    if (p.kind !== 'communalTable') continue;
-    for (const oz of COMMUNAL_OUTLET_OFFSETS) {
-      const sq = new THREE.Mesh(communalOutletGeo, outletMat);
+    if (p.kind !== 'studyTable') continue;
+    for (const oz of STUDY_OUTLET_OFFSETS) {
+      const sq = new THREE.Mesh(studyOutletGeo, outletMat);
       sq.position.set(p.x, tableH + 0.011, p.z + oz);
       scene.add(sq);
     }
@@ -355,20 +355,14 @@ export function createLibraryScene(): LibraryScene {
   });
 
   let t = 0;
-  const revealDistSq = OUTLET_REVEAL_DIST * OUTLET_REVEAL_DIST;
   return {
     scene,
     player,
     colliders,
     update: (dt: number) => {
+      // 电位呼吸脉冲 —— "发光 = 可充电"的视觉语言
       t += dt;
       outletMat.emissiveIntensity = 1.1 + 0.6 * Math.sin(t * 3.2);
-      // 隐藏电位走近揭示 —— 核心玩法:远距离无法判断柱子/端板是否有电位
-      for (const o of hiddenOutlets) {
-        const dx = player.position.x - o.x;
-        const dz = player.position.z - o.z;
-        o.mesh.visible = dx * dx + dz * dz < revealDistSq;
-      }
     },
   };
 }
