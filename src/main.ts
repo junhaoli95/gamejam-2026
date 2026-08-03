@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createLibraryScene } from './scene/loadLibraryScene';
+import { createLibraryScene, DEFAULT_DEBUG_PARAMS } from './scene/loadLibraryScene';
 import { createThirdPersonController } from './player/thirdPersonController';
 import './style.css';
 
@@ -18,7 +18,8 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // --- Scene ---
-const { scene, player, colliders, update } = createLibraryScene();
+const { scene, player, colliders, update, rebuildTableZone, setColliderHelpersVisible } =
+  createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // --- 点击进入指针锁的提示遮罩 ---
 const overlay = document.createElement('div');
@@ -54,6 +55,17 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// --- Debug overlay (dev only; dynamic import keeps lil-gui out of prod bundle) ---
+if (import.meta.env.DEV) {
+  import('./debug/overlay').then(({ attachDebugGui }) => {
+    attachDebugGui({
+      rebuildTableZone,
+      setColliderHelpersVisible,
+      defaultParams: DEFAULT_DEBUG_PARAMS,
+    });
+  });
+}
 
 // --- Game loop ---
 // dt clamped so tab-switch won't cause physics/anim jumps.
