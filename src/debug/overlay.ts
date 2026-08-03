@@ -30,6 +30,8 @@ export function attachDebugGui(opts: DebugOverlayOptions): void {
   const params = {
     rowSpacing: opts.defaultParams.rowSpacing,
     seatSideDist: opts.defaultParams.seatSideDist,
+    freeSeatCount: opts.defaultParams.freeSeatCount,
+    freeSeed: opts.defaultParams.freeSeed,
     showColliders: false,
   };
 
@@ -42,6 +44,16 @@ export function attachDebugGui(opts: DebugOverlayOptions): void {
   tables
     .add(params, 'seatSideDist', 0.55, 1.15, 0.05)
     .name('seat side dist')
+    .onChange(() => opts.rebuildTableZone(params));
+  // 空位数 slider:0-20 个空位(80 自习席里挑这么多当空位)
+  tables
+    .add(params, 'freeSeatCount', 0, 20, 1)
+    .name('free seat count')
+    .onChange(() => opts.rebuildTableZone(params));
+  // 种子数字框:同 (count, seed) 永远产同一份分布,找到好看的 seed 写回常量
+  tables
+    .add(params, 'freeSeed', 0, 9999, 1)
+    .name('free seed (re-roll)')
     .onChange(() => opts.rebuildTableZone(params));
   const collidersCtrl = gui
     .add(params, 'showColliders')
