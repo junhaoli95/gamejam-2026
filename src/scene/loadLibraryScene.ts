@@ -2,22 +2,24 @@ import * as THREE from 'three';
 import { loadGlbNormalized } from '../../snippets/loadGlb';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Library scene (拟真版 v4 — 三区制,按实拍视频重做)
+// Library scene (拟真版 v6 — 每张桌各自逆时针旋转 90°)
 //
-// 实拍视频走线:走廊 → 书架区 → 窗边自习区。场景按此分三区:
-//   西(x<0)   书架区:3 排沿 Z 向书架,柱网 4 柱/排,每排抽一段当豁口(错位)
-//   中        走廊:x∈[-5.5, 6.4] 南北贯通,出生点在南端 (0, 8.5)
-//   东(x>0)   自习区:4 人桌 2 列 × 10 行(纵向密排,横向边缘~2m)
-//             + 窗边 2 人桌 ×2;每桌 4 椅(长边两侧),~92% 座位坐占位猫,
-//             仅 7 个空位 —— "基本满座、一座难求"的实地氛围
+// 实拍视频走线:走廊 → 书架区 → 窗边自习区。场景分三区:
+//   东(x>0)   自习区:4 人桌 2 列 × 10 行(横向 2 列、纵向密排);
+//             每张桌单独逆时针旋 90° → 长边沿 x、椅在 ±z 两侧
+//             84 席坐 77 只占位猫,仅 7 空位 —— "一座难求"的实地氛围
+//   西(x<-4)  书架区:3 排沿 Z 向书架,柱网 4 柱/排,豁口错位
+//   中        走廊+大堂:x∈[-5.5, 5.8] 南北贯通,出生点在南端 (0, 8.5)
 //   东墙      窗墙:发光面+竖梃,冷色 DirectionalLight 模拟日光
 //   四周      墙壁占位:古典深胡桃木色(碰撞由 controller 场地 clamp 承担)
+//
+// 通路设计(玩家直径 0.64m):两列桌间过道 1.4m、桌阵周围走道、桌阵南缘椅间
+// ~1.0m —— 主路全部可走;桌间纵向端距 0.56m 故意密排(椅子贴近,非通道)。
 //
 // 电位宿主三种(视觉语言统一:"发光绿 = 可充电",全部立刻可见):
 //   1. 柱电位   —— 绿方块在柱 ±x 面低位
 //   2. 端板电位盒 —— 书架排北端柱面上的银灰盒 + 绿点
-//   3. 4 人桌电位 —— 桌面中线 2 个绿方块
-// (曾实现"走近 3.2m 才显现",按 review 意见删除——不确定性改由占用状态承载)
+//   3. 4 人桌电位 —— 桌面中线 2 个绿方块(沿 x ±0.45)
 //
 // Model loading: placeholders occupy the floor layout immediately; if
 // `public/library/*.glb` exists, the GLB swaps in for the placeholder of
@@ -38,7 +40,7 @@ const MODEL_PATHS: Record<ModelKind, string> = {
 const MODEL_DIMS: Record<ModelKind, { w: number; h: number; d: number }> = {
   bookshelf:     { w: 3.0, h: 2.4,  d: 0.6 },
   column:        { w: 0.9, h: 3.4,  d: 0.9 },
-  studyTable:    { w: 1.2, h: 0.75, d: 1.8 }, // 4 人桌,长边沿 z
+  studyTable:    { w: 1.8, h: 0.75, d: 1.2 }, // 4 人桌,长边沿 x
   readingTable:  { w: 1.8, h: 0.75, d: 0.9 },
   wallSocket:    { w: 0.3, h: 0.5,  d: 0.12 },
 };
@@ -64,7 +66,7 @@ const FLOOR_D = 24;
 // 书架区:3 排 × 4 柱
 const STACK_ROW_XS = [-13, -9.5, -6];
 const COL_ZS = [-9, -5, -1, 3];
-// 每排抽掉的书架段(段中点 z),逐排错位 → 东西穿行被迫 S 形
+// 每排抽掉的书架段(段中点 z),逐排错位 → 南北穿行被迫 S 形
 const ROW_GAP_MID_Z = [-3, 1, -7];
 // 北端柱面挂电位盒的排
 const END_BOX_ROWS = new Set([0, 2]);
@@ -72,7 +74,7 @@ const END_BOX_ROWS = new Set([0, 2]);
 interface PoweredColumn { x: number; z: number; face: 1 | -1; }
 interface EndPanelBox { x: number; z: number; }
 
-// 自习区桌阵:2 列 × 10 行(实地观察:纵向非常多、横向只有两列)
+// 自习区桌阵:2 列(x)× 10 行(z),每张桌单独逆时针旋 90°(长边沿 x)
 const STUDY_COL_XS = [7, 10.2];
 const STUDY_ROW_ZS = [-10.6, -8.24, -5.88, -3.52, -1.16, 1.2, 3.56, 5.92, 8.28, 10.64];
 
@@ -120,7 +122,7 @@ function buildPlacements(): {
   return { placements, poweredColumns, endPanelBoxes };
 }
 
-// 4 人桌电位:桌面中线 2 个(沿 z ±0.45)
+// 4 人桌电位:桌面中线 2 个(沿 x ±0.45)
 const STUDY_OUTLET_OFFSETS = [-0.45, 0.45];
 const COLUMN_OUTLET_Y = 0.35;
 
@@ -135,15 +137,19 @@ export interface LibraryScene {
   update: (dt: number) => void;
 }
 
-/** 占位椅:座面 + 靠背(靠背在远离桌子一侧)。 */
+/** 占位椅:座面 + 靠背(靠背在远离桌子一侧,axis=椅子朝向所在轴)。 */
 const chairMat = new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.7, metalness: 0 });
-function createChair(side: 1 | -1): THREE.Group {
+function createChair(side: 1 | -1, axis: 'x' | 'z'): THREE.Group {
   const g = new THREE.Group();
   const seat = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), chairMat);
   seat.position.y = 0.225;
   g.add(seat);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.45), chairMat);
-  back.position.set(side * 0.24, 0.7, 0);
+  const back = new THREE.Mesh(
+    axis === 'x' ? new THREE.BoxGeometry(0.08, 0.55, 0.45) : new THREE.BoxGeometry(0.45, 0.55, 0.08),
+    chairMat,
+  );
+  if (axis === 'x') back.position.set(side * 0.24, 0.7, 0);
+  else back.position.set(0, 0.7, side * 0.24);
   g.add(back);
   return g;
 }
@@ -252,7 +258,7 @@ export function createLibraryScene(): LibraryScene {
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   scene.add(new THREE.HemisphereLight(0xf6f8fa, 0x8f8672, 0.5));
   const daylight = new THREE.DirectionalLight(0xdfe9ff, 0.45);
-  daylight.position.set(30, 12, -3);
+  daylight.position.set(30, 12, -3); // 东窗日光
   scene.add(daylight);
   const neutralHue = 0xfff4e2;
   for (const [x, z] of ([[0, -8], [0, 8], [10, -3]] as Array<[number, number]>)) {
@@ -270,14 +276,12 @@ export function createLibraryScene(): LibraryScene {
   windowGlow.position.set(15.95, 1.9, -3);
   scene.add(windowGlow);
   const mullionMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.5, metalness: 0.3 });
-  for (const z of [-9, -6, -3, 0, 3]) {
-    const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.1), mullionMat);
+  for (const z of [-9, -6, -3, 0, 3]) {    const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.1), mullionMat);
     mullion.position.set(15.93, 1.9, z);
     scene.add(mullion);
   }
 
   const { placements, poweredColumns, endPanelBoxes } = buildPlacements();
-
   // 占位 + GLB swap 记录 + 静态碰撞体
   interface Entry { placeholder: THREE.Object3D; x: number; z: number; rotY: number; }
   const placementsByKind = new Map<ModelKind, Entry[]>();
@@ -362,18 +366,18 @@ export function createLibraryScene(): LibraryScene {
   const tableH = MODEL_DIMS.studyTable.h;
   for (const p of placements) {
     if (p.kind !== 'studyTable') continue;
-    for (const oz of STUDY_OUTLET_OFFSETS) {
+    for (const ox of STUDY_OUTLET_OFFSETS) {
       const sq = new THREE.Mesh(studyOutletGeo, outletMat);
-      sq.position.set(p.x, tableH + 0.011, p.z + oz);
+      sq.position.set(p.x + ox, tableH + 0.011, p.z);
       scene.add(sq);
     }
   }
 
-  // ── 座位:4 人桌每桌 4 椅(长边 ±x 两侧)+ 窗边桌每桌 2 椅;~92% 坐占位猫 ──
-  const SEAT_Z_OFFSETS = [-0.45, 0.45];
-  const SEAT_SIDE_X = 0.95;
-  // 空位("只有少量的几个位置"):key = col,row,si(si: 侧-1[zo-0.45=0, +0.45=1], 侧+1[2, 3])
-  const FREE_SEATS = new Set(['0,1,1', '0,4,0', '1,2,3', '1,6,0', '0,7,3', '1,8,2']);
+  // ── 座位:4 人桌每桌 4 椅(±z 两侧)+ 窗边桌每桌 2 椅;~92% 坐占位猫 ──
+  const SEAT_OFFSETS = [-0.45, 0.45];
+  const SEAT_SIDE_DIST = 0.95;
+  // 空位("只有少量的几个位置"):key = col(0..1),row(0..9),si(侧-1[xo-0.45=0, +0.45=1], 侧+1[2, 3])
+  const FREE_SEATS = new Set(['0,1,1', '1,4,0', '0,2,3', '1,6,0', '0,7,3', '1,8,2']);
   let furIdx = 0;
 
   for (const p of placements) {
@@ -382,10 +386,10 @@ export function createLibraryScene(): LibraryScene {
       const ri = STUDY_ROW_ZS.indexOf(p.z);
       let si = 0;
       for (const side of [-1, 1] as const) {
-        for (const zo of SEAT_Z_OFFSETS) {
-          const sx = p.x + side * SEAT_SIDE_X;
-          const sz = p.z + zo;
-          const chair = createChair(side);
+        for (const xo of SEAT_OFFSETS) {
+          const sx = p.x + xo;
+          const sz = p.z + side * SEAT_SIDE_DIST;
+          const chair = createChair(side, 'z');
           chair.position.set(sx, 0, sz);
           scene.add(chair);
           colliders.push(new THREE.Box3(
@@ -393,7 +397,8 @@ export function createLibraryScene(): LibraryScene {
             new THREE.Vector3(sx + 0.225, 0.9, sz + 0.225),
           ));
           if (!FREE_SEATS.has(`${ci},${ri},${si}`)) {
-            const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side * Math.PI / 2);
+            // 南侧椅(side=+1)面向 -z(桌),北侧椅面向 +z
+            const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side === 1 ? 0 : Math.PI);
             cat.position.set(sx, 0.45, sz);
             scene.add(cat);
           }
@@ -401,11 +406,11 @@ export function createLibraryScene(): LibraryScene {
         }
       }
     } else if (p.kind === 'readingTable') {
-      // 窗边 2 人桌:椅在西侧面向窗(+x);再留 1 个空位
-      for (const zo of SEAT_Z_OFFSETS) {
+      // 窗边 2 人桌:椅在西侧面向东墙(+x);再留 1 个空位
+      for (const zo of SEAT_OFFSETS) {
         const sx = 13.5;
         const sz = p.z + zo;
-        const chair = createChair(-1);
+        const chair = createChair(-1, 'x');
         chair.position.set(sx, 0, sz);
         scene.add(chair);
         colliders.push(new THREE.Box3(
@@ -428,7 +433,7 @@ export function createLibraryScene(): LibraryScene {
   const WALL_T = 0.2;
   const WALL_SEGMENTS: ReadonlyArray<readonly [number, number, number, number]> = [
     // [cx, cz, w, d]
-    [0, -12 + WALL_T / 2, FLOOR_W, WALL_T],  // 北
+    [0, -12 + WALL_T / 2, FLOOR_W, WALL_T],  // 北(实墙)
     [0, 12 - WALL_T / 2, FLOOR_W, WALL_T],   // 南
     [-16 + WALL_T / 2, 0, WALL_T, FLOOR_D],  // 西
     [16 - WALL_T / 2, 7.5, WALL_T, 9],       // 东-南段(窗 z∈[-9,3] 以南)
@@ -439,7 +444,7 @@ export function createLibraryScene(): LibraryScene {
     wall.position.set(cx, WALL_H / 2, cz);
     scene.add(wall);
   }
-  // 窗下槛 + 窗上楣
+  // 东窗下槛 + 窗上楣
   const sill = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.8, 12), wallMat);
   sill.position.set(15.9, 0.4, -3);
   scene.add(sill);

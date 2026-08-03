@@ -67,7 +67,8 @@ interface OpponentController {
    - 任何 push 前先 `gh pr view <n> --json state` 确认 PR 仍 OPEN（防止往已 merge 分支续推的事故）
    - commit 作者身份：仓库本地 `user.name="Kimi K3"`（与开发者本人区分；只设 repo-local，勿动全局配置）
 8. 守住 scoped 边界：单场景图书馆、玩家+2~3 NPC、2 app、3 pip。多场景/多 app/升级树/roguelike 树 全部是 stretch，D11+ 时间够才碰
-9. **调试资源闭环**：chrome-devtools MCP 验证（截图/console/模拟输入）完成后，立即杀掉 MCP chrome 进程与 dev server，并在回复中报告"已关"。开发者用电池供电，闲置 dev server 功耗 10w→40w，不允许挂后台
+9. **调试资源闭环**：MCP 验证完成后**关闭游戏标签页**（`chrome-devtools_close_page`）即可；不要杀 MCP chrome 进程或 dev server —— 渲染中的标签页才是高能耗（10w→40w），闲置进程/空白页可忽略。开发者可能随时接手试玩，dev server 默认保持运行
+10. **场景尺度目标（backlog）**：实地图书馆一层约为当前场景（32×24m）的 10+ 倍面积，目标场景尺度向实地看齐。当前 32×24 为占位阶段尺度，后续统一调整（影响布局密度、NPC 寻路、相机/雾效范围，属大改，单独 PR）
 
 ## AI 协作偏好
 
