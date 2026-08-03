@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { loadGlbNormalized } from '../../snippets/loadGlb';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Library scene (拟真版 v6 — 每张桌各自逆时针旋转 90°)
+// Library scene (拟真版 v6 — 每张桌各自逆时针旋转 90°;debug overlay 可调)
 //
 // 实拍视频走线:走廊 → 书架区 → 窗边自习区。场景分三区:
 //   东(x>0)   自习区:4 人桌 2 列 × 10 行(横向 2 列、纵向密排);
@@ -25,6 +25,13 @@ import { loadGlbNormalized } from '../../snippets/loadGlb';
 // `public/library/*.glb` exists, the GLB swaps in for the placeholder of
 // that kind (preserving placement position + rotation). Drop GLBs in and
 // reload the dev server — no code changes needed.
+//
+// Debug overlay (src/debug/overlay.ts):
+//   - rowSpacing / seatSideDist sliders → createLibraryScene().rebuildTableZone(p)
+//     tear down the study-table Group + colliders, rebuild in place; static
+//     geometry (lights/floor/walls/bookcases/readingTables/player) untouched.
+//   - showColliders checkbox (+ F key) → Box3Helper overlay for ALL colliders,
+//     including the chair AABBs that block passage between rows.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ModelKind = 'bookshelf' | 'column' | 'studyTable' | 'readingTable' | 'wallSocket';
@@ -74,11 +81,39 @@ const END_BOX_ROWS = new Set([0, 2]);
 interface PoweredColumn { x: number; z: number; face: 1 | -1; }
 interface EndPanelBox { x: number; z: number; }
 
-// 自习区桌阵:2 列(x)× 10 行(z),每张桌单独逆时针旋 90°(长边沿 x)
+// 自习区桌阵:2 列(x)× 10 行(z),每张桌单独逆时针旋 90°(长边沿 x)。
+// 列距固定(过道已够宽),行距通过 debug overlay 实时调。
 const STUDY_COL_XS = [7, 10.2];
-const STUDY_ROW_ZS = [-10.6, -8.24, -5.88, -3.52, -1.16, 1.2, 3.56, 5.92, 8.28, 10.64];
+const STUDY_ROW_COUNT = 10;
+const DEFAULT_ROW_SPACING = 2.36;
+const DEFAULT_SEAT_SIDE_DIST = 0.95;
 
-function buildPlacements(): {
+// 4 人桌电位:桌面中线 2 个(沿 x ±0.45)
+const STUDY_OUTLET_OFFSETS = [-0.45, 0.45];
+const COLUMN_OUTLET_Y = 0.35;
+
+const SPAWN = { x: 0, z: 8.5 };
+
+/** Debug overlay 可调参数。rowSpacing = 行距(纵向 z);seatSideDist = 椅子离桌距离。 */
+export interface DebugParams {
+  rowSpacing: number;
+  seatSideDist: number;
+}
+
+export const DEFAULT_DEBUG_PARAMS: DebugParams = {
+  rowSpacing: DEFAULT_ROW_SPACING,
+  seatSideDist: DEFAULT_SEAT_SIDE_DIST,
+};
+
+/** 由 rowSpacing + rowCount 动态生成 z 坐标,居中以避免越过地板边界。 */
+function studyRowZs(rowSpacing: number, rowCount = STUDY_ROW_COUNT): number[] {
+  const span = (rowCount - 1) * rowSpacing;
+  const startZ = -span / 2;
+  return Array.from({ length: rowCount }, (_, i) => startZ + i * rowSpacing);
+}
+
+/** 书架/柱/端板盒/壁插/窗边桌 —— 静态布局,debug rebuild 不动。 */
+function buildStaticPlacements(): {
   placements: Placement[];
   poweredColumns: PoweredColumn[];
   endPanelBoxes: EndPanelBox[];
@@ -103,13 +138,6 @@ function buildPlacements(): {
     if (END_BOX_ROWS.has(ri)) endPanelBoxes.push({ x, z: COL_ZS[0] });
   });
 
-  // 自习区:4 人桌 2 列 × 10 行 —— 纵向密排(间距 0.56m,座椅肩并肩),
-  // 横向相邻远(中心距 3.2m = 边缘 2.0m)
-  for (const x of STUDY_COL_XS) {
-    for (const z of STUDY_ROW_ZS) {
-      placements.push({ kind: 'studyTable', x, z });
-    }
-  }
   placements.push(
     { kind: 'readingTable', x: 14.2, z: -6, rotY: Math.PI / 2 },
     { kind: 'readingTable', x: 14.2, z: -2, rotY: Math.PI / 2 },
@@ -122,19 +150,29 @@ function buildPlacements(): {
   return { placements, poweredColumns, endPanelBoxes };
 }
 
-// 4 人桌电位:桌面中线 2 个(沿 x ±0.45)
-const STUDY_OUTLET_OFFSETS = [-0.45, 0.45];
-const COLUMN_OUTLET_Y = 0.35;
-
-const SPAWN = { x: 0, z: 8.5 };
+/** 4 人自习桌布局 —— rowSpacing 实时调;静态几何体不动这里。 */
+function buildStudyTablePlacements(rowSpacing: number): Placement[] {
+  const rows = studyRowZs(rowSpacing);
+  const out: Placement[] = [];
+  for (const x of STUDY_COL_XS) {
+    for (const z of rows) {
+      out.push({ kind: 'studyTable', x, z });
+    }
+  }
+  return out;
+}
 
 export interface LibraryScene {
   scene: THREE.Scene;
   /** Placeholder cat —— 正式 player entity 进 game/ 后移除。 */
   player: THREE.Group;
-  /** 静态碰撞体(书架/柱/桌),玩家与相机共用。 */
+  /** 静态+桌区合并碰撞体(玩家与相机共用)。rebuild 时原地刷新,引用稳定。 */
   colliders: THREE.Box3[];
   update: (dt: number) => void;
+  /** Debug overlay 用:按新 params 拆除并重建桌区(桌椅猫+电位+collider+helper)。 */
+  rebuildTableZone: (params: DebugParams) => void;
+  /** Debug overlay 用:显示/隐藏全部 collider 的线框。 */
+  setColliderHelpersVisible: (visible: boolean) => void;
 }
 
 /** 占位椅:座面 + 靠背(靠背在远离桌子一侧,axis=椅子朝向所在轴)。 */
@@ -242,7 +280,11 @@ function disposeObject(root: THREE.Object3D): void {
   });
 }
 
-export function createLibraryScene(): LibraryScene {
+// ── GLB async swap-assist ─────────────────────────────────────────────────
+// 占位 + GLB swap 记录 + 静态碰撞体:静态 placements 一次构完,studyTable 进 tableZone。
+interface Entry { placeholder: THREE.Object3D; x: number; z: number; rotY: number; }
+
+export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): LibraryScene {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xedeae2);
 
@@ -276,19 +318,59 @@ export function createLibraryScene(): LibraryScene {
   windowGlow.position.set(15.95, 1.9, -3);
   scene.add(windowGlow);
   const mullionMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.5, metalness: 0.3 });
-  for (const z of [-9, -6, -3, 0, 3]) {    const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.1), mullionMat);
+  for (const z of [-9, -6, -3, 0, 3]) {
+    const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.1), mullionMat);
     mullion.position.set(15.93, 1.9, z);
     scene.add(mullion);
   }
 
-  const { placements, poweredColumns, endPanelBoxes } = buildPlacements();
-  // 占位 + GLB swap 记录 + 静态碰撞体
-  interface Entry { placeholder: THREE.Object3D; x: number; z: number; rotY: number; }
-  const placementsByKind = new Map<ModelKind, Entry[]>();
-  (Object.keys(MODEL_PATHS) as ModelKind[]).forEach(k => placementsByKind.set(k, []));
+  // 墙壁占位:古典深胡桃木色(视觉;碰撞由 controller 场地 clamp 承担)
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.75, metalness: 0 });
+  const WALL_H = 3.2;
+  const WALL_T = 0.2;
+  const WALL_SEGMENTS: ReadonlyArray<readonly [number, number, number, number]> = [
+    // [cx, cz, w, d]
+    [0, -12 + WALL_T / 2, FLOOR_W, WALL_T],  // 北(实墙)
+    [0, 12 - WALL_T / 2, FLOOR_W, WALL_T],   // 南
+    [-16 + WALL_T / 2, 0, WALL_T, FLOOR_D],  // 西
+    [16 - WALL_T / 2, 7.5, WALL_T, 9],       // 东-南段(窗 z∈[-9,3] 以南)
+    [16 - WALL_T / 2, -10.5, WALL_T, 3],     // 东-北段
+  ];
+  for (const [cx, cz, w, d] of WALL_SEGMENTS) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), wallMat);
+    wall.position.set(cx, WALL_H / 2, cz);
+    scene.add(wall);
+  }
+  // 东窗下槛 + 窗上楣
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.8, 12), wallMat);
+  sill.position.set(15.9, 0.4, -3);
+  scene.add(sill);
+  const header = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.4, 12), wallMat);
+  header.position.set(15.9, 3.2, -3);
+  scene.add(header);
 
+  // ── 静态 placements:书架/柱/端板盒/壁插/窗边桌(只构一次)──────────
+  const { placements: staticPlacements, poweredColumns, endPanelBoxes } = buildStaticPlacements();
+
+  const placementsByKind = new Map<ModelKind, Entry[]>();
+  (Object.keys(MODEL_PATHS) as ModelKind[]).forEach(k => {
+    // studyTable 走 tableZone 通路,不进静态 placementsByKind(GLB swap 同样走 tableZone)
+    if (k === 'studyTable') { placementsByKind.set(k, []); return; }
+    placementsByKind.set(k, []);
+  });
+
+  // colliders:controller 持引用,通过 .length=0 + push 原地刷新
   const colliders: THREE.Box3[] = [];
+  const staticColliders: THREE.Box3[] = [];   // 永驻;rebuild 不动
+  const tableColliders: THREE.Box3[] = [];     // 每次 rebuild 清空重建
   const COLLIDER_KINDS = new Set<ModelKind>(['bookshelf', 'column', 'studyTable', 'readingTable']);
+
+  // Box3Helper:静态 + 桌区各自维护,scene.add 通常 visible=false
+  let showHelpers = false;
+  const staticHelpers: THREE.Box3Helper[] = [];
+  const tableHelpers: THREE.Box3Helper[] = [];
+  const HELPER_COLOR_STATIC = 0x00aaff;
+  const HELPER_COLOR_TABLE = 0x00ff44;
 
   const socketMat = new THREE.MeshStandardMaterial({
     color: PLACEHOLDER_COLOR.wallSocket,
@@ -298,7 +380,7 @@ export function createLibraryScene(): LibraryScene {
     metalness: 0,
   });
 
-  for (const p of placements) {
+  for (const p of staticPlacements) {
     const dim = MODEL_DIMS[p.kind];
     const placeholder = p.kind === 'bookshelf'
       ? buildShelfPlaceholder(dim)
@@ -312,21 +394,28 @@ export function createLibraryScene(): LibraryScene {
     else placeholder.position.set(p.x, 0, p.z);
     placeholder.rotation.y = p.rotY ?? 0;
     scene.add(placeholder);
-    placementsByKind.get(p.kind)!.push({
-      placeholder,
-      x: p.x,
-      z: p.z,
-      rotY: p.rotY ?? 0,
-    });
+    if (p.kind !== 'studyTable') {
+      placementsByKind.get(p.kind)!.push({
+        placeholder,
+        x: p.x,
+        z: p.z,
+        rotY: p.rotY ?? 0,
+      });
+    }
 
     if (COLLIDER_KINDS.has(p.kind)) {
       const rotated = Math.abs(Math.abs(p.rotY ?? 0) - Math.PI / 2) < 0.01;
       const ew = rotated ? dim.d : dim.w;
       const ed = rotated ? dim.w : dim.d;
-      colliders.push(new THREE.Box3(
+      const b = new THREE.Box3(
         new THREE.Vector3(p.x - ew / 2, 0, p.z - ed / 2),
         new THREE.Vector3(p.x + ew / 2, dim.h, p.z + ed / 2),
-      ));
+      );
+      staticColliders.push(b);
+      const h = new THREE.Box3Helper(b, HELPER_COLOR_STATIC);
+      h.visible = false;
+      scene.add(h);
+      staticHelpers.push(h);
     }
   }
 
@@ -361,62 +450,27 @@ export function createLibraryScene(): LibraryScene {
     scene.add(dot);
   }
 
-  // 4 人桌电位:桌面中线 2 个绿方块(独立于桌子 mesh,GLB swap 后仍在正确位置)
-  const studyOutletGeo = new THREE.BoxGeometry(0.2, 0.02, 0.2);
-  const tableH = MODEL_DIMS.studyTable.h;
-  for (const p of placements) {
-    if (p.kind !== 'studyTable') continue;
-    for (const ox of STUDY_OUTLET_OFFSETS) {
-      const sq = new THREE.Mesh(studyOutletGeo, outletMat);
-      sq.position.set(p.x + ox, tableH + 0.011, p.z);
-      scene.add(sq);
-    }
-  }
-
-  // ── 座位:4 人桌每桌 4 椅(±z 两侧)+ 窗边桌每桌 2 椅;~92% 坐占位猫 ──
+  // ── 窗边 readingTable 座位:静态(2 人桌,西侧椅)──
   const SEAT_OFFSETS = [-0.45, 0.45];
-  const SEAT_SIDE_DIST = 0.95;
-  // 空位("只有少量的几个位置"):key = col(0..1),row(0..9),si(侧-1[xo-0.45=0, +0.45=1], 侧+1[2, 3])
-  const FREE_SEATS = new Set(['0,1,1', '1,4,0', '0,2,3', '1,6,0', '0,7,3', '1,8,2']);
-  let furIdx = 0;
-
-  for (const p of placements) {
-    if (p.kind === 'studyTable') {
-      const ci = STUDY_COL_XS.indexOf(p.x);
-      const ri = STUDY_ROW_ZS.indexOf(p.z);
-      let si = 0;
-      for (const side of [-1, 1] as const) {
-        for (const xo of SEAT_OFFSETS) {
-          const sx = p.x + xo;
-          const sz = p.z + side * SEAT_SIDE_DIST;
-          const chair = createChair(side, 'z');
-          chair.position.set(sx, 0, sz);
-          scene.add(chair);
-          colliders.push(new THREE.Box3(
-            new THREE.Vector3(sx - 0.225, 0, sz - 0.225),
-            new THREE.Vector3(sx + 0.225, 0.9, sz + 0.225),
-          ));
-          if (!FREE_SEATS.has(`${ci},${ri},${si}`)) {
-            // 南侧椅(side=+1)面向 -z(桌),北侧椅面向 +z
-            const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side === 1 ? 0 : Math.PI);
-            cat.position.set(sx, 0.45, sz);
-            scene.add(cat);
-          }
-          si++;
-        }
-      }
-    } else if (p.kind === 'readingTable') {
-      // 窗边 2 人桌:椅在西侧面向东墙(+x);再留 1 个空位
+  {
+    const readingTablePlacements = staticPlacements.filter(p => p.kind === 'readingTable');
+    let furIdx = 0;
+    for (const p of readingTablePlacements) {
       for (const zo of SEAT_OFFSETS) {
         const sx = 13.5;
         const sz = p.z + zo;
         const chair = createChair(-1, 'x');
         chair.position.set(sx, 0, sz);
         scene.add(chair);
-        colliders.push(new THREE.Box3(
+        const cb = new THREE.Box3(
           new THREE.Vector3(sx - 0.225, 0, sz - 0.225),
           new THREE.Vector3(sx + 0.225, 0.9, sz + 0.225),
-        ));
+        );
+        staticColliders.push(cb);
+        const h = new THREE.Box3Helper(cb, HELPER_COLOR_STATIC);
+        h.visible = false;
+        scene.add(h);
+        staticHelpers.push(h);
         const isFree = p.z === -2 && zo === 0.45;
         if (!isFree) {
           const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], -Math.PI / 2);
@@ -427,40 +481,150 @@ export function createLibraryScene(): LibraryScene {
     }
   }
 
-  // ── 墙壁占位:古典深胡桃木色(视觉;碰撞由 controller 场地 clamp 承担)──
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.75, metalness: 0 });
-  const WALL_H = 3.2;
-  const WALL_T = 0.2;
-  const WALL_SEGMENTS: ReadonlyArray<readonly [number, number, number, number]> = [
-    // [cx, cz, w, d]
-    [0, -12 + WALL_T / 2, FLOOR_W, WALL_T],  // 北(实墙)
-    [0, 12 - WALL_T / 2, FLOOR_W, WALL_T],   // 南
-    [-16 + WALL_T / 2, 0, WALL_T, FLOOR_D],  // 西
-    [16 - WALL_T / 2, 7.5, WALL_T, 9],       // 东-南段(窗 z∈[-9,3] 以南)
-    [16 - WALL_T / 2, -10.5, WALL_T, 3],     // 东-北段
-  ];
-  for (const [cx, cz, w, d] of WALL_SEGMENTS) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), wallMat);
-    wall.position.set(cx, WALL_H / 2, cz);
-    scene.add(wall);
-  }
-  // 东窗下槛 + 窗上楣
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.8, 12), wallMat);
-  sill.position.set(15.9, 0.4, -3);
-  scene.add(sill);
-  const header = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.4, 12), wallMat);
-  header.position.set(15.9, 3.2, -3);
-  scene.add(header);
-
+  // ── 玩家 + tableZone Group(桌椅猫重建时不碰玩家)──
   const player = createPlaceholderCat();
   scene.add(player);
 
-  // Async GLB load + swap. If GLB missing (scaffolding), placeholder stays.
-  (Object.keys(MODEL_PATHS) as ModelKind[]).forEach(kind => {
+  const tableZone = new THREE.Group();
+  tableZone.name = 'tableZone';
+  scene.add(tableZone);
+
+  // 记 studyTable 的 GLB swap entries(每次 rebuild 也清空重建;若有 GLB 已加载,
+  // 复用已加载的 template Group 来 clone —— 此处简化:每次新 loader.loadAsync)。
+  // 当前 jam 期 GLB 还没落盘,studyTable placeholder 重建走"拿同一份 dim 做 Mesh"即可。
+  // 将来若启用 studyTable GLB,把 template 缓存于 closure 外,rebuild 时 clone 复用。
+  let studyTableGlbTemplate: THREE.Group | null = null;
+  // studyTable 的 GLB 也得能 swap:这里把它单独拎出来异步加载,与静态 GLB 解耦。
+  {
+    const kind: ModelKind = 'studyTable';
     loadGlbNormalized(MODEL_PATHS[kind], MODEL_DIMS[kind].h)
       .then((template: THREE.Group) => {
-        // loadGlbNormalized sits feet on y=0 but leaves X/Z centered on the
-        // original GLB origin. Recenter XZ so each placement is centered on (x, z).
+        const box = new THREE.Box3().setFromObject(template);
+        const cx = (box.min.x + box.max.x) / 2;
+        const cz = (box.min.z + box.max.z) / 2;
+        template.position.x -= cx;
+        template.position.z -= cz;
+        studyTableGlbTemplate = template;
+        // 加载到的那刻,把桌区当前 placeholder 全替成 GLB clone
+        rebuildTableZone(currentParams);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[LibraryScene] ${MODEL_PATHS[kind]} not loaded; placeholder kept (${msg})`);
+      });
+  }
+
+  // ── 桌区构建器(静态部分构完后调用一次,rebuild 时再调用)──
+  // FREE_SEATS:key = col(0..1),row(0..9),si(侧-1[xo-0.45=0, +0.45=1], 侧+1[2, 3])
+  const FREE_SEATS = new Set(['0,1,1', '1,4,0', '0,2,3', '1,6,0', '0,7,3', '1,8,2']);
+  let currentParams: DebugParams = params;
+  let furIdx = 0;
+
+  function buildOneStudyTable(p: Placement, rows: number[]): void {
+    const dim = MODEL_DIMS.studyTable;
+
+    // 桌 mesh
+    const tableMesh: THREE.Object3D = studyTableGlbTemplate
+      ? (() => {
+          const m = studyTableGlbTemplate!.clone(true);
+          m.position.set(p.x, 0, p.z);
+          m.rotation.y = p.rotY ?? 0;
+          return m;
+        })()
+      : (() => {
+          const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(dim.w, dim.h, dim.d),
+            new THREE.MeshStandardMaterial({ color: PLACEHOLDER_COLOR.studyTable, roughness: 0.6, metalness: 0 }),
+          );
+          mesh.position.set(p.x, dim.h / 2, p.z);
+          mesh.rotation.y = p.rotY ?? 0;
+          return mesh;
+        })();
+    tableZone.add(tableMesh);
+
+    // 桌 collider(桌本身)
+    const rotated = Math.abs(Math.abs(p.rotY ?? 0) - Math.PI / 2) < 0.01;
+    const ew = rotated ? dim.d : dim.w;
+    const ed = rotated ? dim.w : dim.d;
+    const tableBox = new THREE.Box3(
+      new THREE.Vector3(p.x - ew / 2, 0, p.z - ed / 2),
+      new THREE.Vector3(p.x + ew / 2, dim.h, p.z + ed / 2),
+    );
+    tableColliders.push(tableBox);
+    pushTableHelper(tableBox);
+
+    // 桌面中线 2 电位
+    const tableH = dim.h;
+    for (const ox of STUDY_OUTLET_OFFSETS) {
+      const sq = new THREE.Mesh(studyOutletGeo, outletMat);
+      sq.position.set(p.x + ox, tableH + 0.011, p.z);
+      tableZone.add(sq);
+    }
+
+    // 4 椅 + 4 座位猫
+    const ci = STUDY_COL_XS.indexOf(p.x);
+    const ri = rows.indexOf(p.z);
+    let si = 0;
+    for (const side of [-1, 1] as const) {
+      for (const xo of SEAT_OFFSETS) {
+        const sx = p.x + xo;
+        const sz = p.z + side * currentParams.seatSideDist;
+        const chair = createChair(side, 'z');
+        chair.position.set(sx, 0, sz);
+        tableZone.add(chair);
+        const cb = new THREE.Box3(
+          new THREE.Vector3(sx - 0.225, 0, sz - 0.225),
+          new THREE.Vector3(sx + 0.225, 0.9, sz + 0.225),
+        );
+        tableColliders.push(cb);
+        pushTableHelper(cb);
+        if (!FREE_SEATS.has(`${ci},${ri},${si}`)) {
+          const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side === 1 ? 0 : Math.PI);
+          cat.position.set(sx, 0.45, sz);
+          tableZone.add(cat);
+        }
+        si++;
+      }
+    }
+  }
+
+  const studyOutletGeo = new THREE.BoxGeometry(0.2, 0.02, 0.2);
+
+  function pushTableHelper(b: THREE.Box3): void {
+    const h = new THREE.Box3Helper(b, HELPER_COLOR_TABLE);
+    h.visible = showHelpers;
+    scene.add(h);
+    tableHelpers.push(h);
+  }
+
+  function rebuildTableZone(p: DebugParams): void {
+    currentParams = p;
+    // 拆桌区:remove 全部 child + dispose + 清 tableColliders + 清 tableHelpers
+    while (tableZone.children.length) {
+      const c = tableZone.children[0];
+      tableZone.remove(c);
+      disposeObject(c);
+    }
+    tableColliders.length = 0;
+    for (const h of tableHelpers) scene.remove(h);
+    tableHelpers.length = 0;
+    furIdx = 0; // 重建时毛色从头排起,前后排布稳定
+
+    const rows = studyRowZs(p.rowSpacing);
+    const tablePlacements = buildStudyTablePlacements(p.rowSpacing);
+    for (const tp of tablePlacements) buildOneStudyTable(tp, rows);
+
+    // 合并到 controller 持引用的 colliders
+    colliders.length = 0;
+    colliders.push(...staticColliders, ...tableColliders);
+    console.log(`[debug] rebuild table zone: rowSpacing=${p.rowSpacing}, seatSideDist=${p.seatSideDist}, tables=${tablePlacements.length}`);
+  }
+
+  // 异步 GLB swap:静态 kinds(非 studyTable)
+  (Object.keys(MODEL_PATHS) as ModelKind[]).forEach(kind => {
+    if (kind === 'studyTable') return; // studyTable 走 tableZone 通路(上面已单独 loader)
+    loadGlbNormalized(MODEL_PATHS[kind], MODEL_DIMS[kind].h)
+      .then((template: THREE.Group) => {
         const box = new THREE.Box3().setFromObject(template);
         const cx = (box.min.x + box.max.x) / 2;
         const cz = (box.min.z + box.max.z) / 2;
@@ -482,6 +646,15 @@ export function createLibraryScene(): LibraryScene {
       });
   });
 
+  // 首次构建桌区
+  rebuildTableZone(params);
+
+  function setColliderHelpersVisible(visible: boolean): void {
+    showHelpers = visible;
+    for (const h of staticHelpers) h.visible = visible;
+    for (const h of tableHelpers) h.visible = visible;
+  }
+
   let t = 0;
   return {
     scene,
@@ -492,5 +665,7 @@ export function createLibraryScene(): LibraryScene {
       t += dt;
       outletMat.emissiveIntensity = 1.1 + 0.6 * Math.sin(t * 3.2);
     },
+    rebuildTableZone,
+    setColliderHelpersVisible,
   };
 }
