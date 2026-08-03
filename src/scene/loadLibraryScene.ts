@@ -87,6 +87,8 @@ const STUDY_COL_XS = [7, 10.2];
 const STUDY_ROW_COUNT = 10;
 const DEFAULT_ROW_SPACING = 2.36;
 const DEFAULT_SEAT_SIDE_DIST = 0.95;
+const DEFAULT_FREE_SEAT_COUNT = 6;
+const DEFAULT_FREE_SEED = 0;
 
 // 4 人桌电位:桌面中线 2 个(沿 x ±0.45)
 const STUDY_OUTLET_OFFSETS = [-0.45, 0.45];
@@ -94,15 +96,19 @@ const COLUMN_OUTLET_Y = 0.35;
 
 const SPAWN = { x: 0, z: 8.5 };
 
-/** Debug overlay 可调参数。rowSpacing = 行距(纵向 z);seatSideDist = 椅子离桌距离。 */
+/** Debug overlay 可调参数。空位用种子化 RNG 散布,确定性可复现。 */
 export interface DebugParams {
   rowSpacing: number;
   seatSideDist: number;
+  freeSeatCount: number;
+  freeSeed: number;
 }
 
 export const DEFAULT_DEBUG_PARAMS: DebugParams = {
   rowSpacing: DEFAULT_ROW_SPACING,
   seatSideDist: DEFAULT_SEAT_SIDE_DIST,
+  freeSeatCount: DEFAULT_FREE_SEAT_COUNT,
+  freeSeed: DEFAULT_FREE_SEED,
 };
 
 /** 由 rowSpacing + rowCount 动态生成 z 坐标,居中以避免越过地板边界。 */
@@ -110,6 +116,40 @@ function studyRowZs(rowSpacing: number, rowCount = STUDY_ROW_COUNT): number[] {
   const span = (rowCount - 1) * rowSpacing;
   const startZ = -span / 2;
   return Array.from({ length: rowCount }, (_, i) => startZ + i * rowSpacing);
+}
+
+/** 确定性 PRNG(mulberry32):1 行 state + imul 混淆,够 jam 期散布空位用。 */
+function mulberry32(seed: number): () => number {
+  let a = seed | 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * 用 seed 确定性地从 80 个自习座位里挑 count 个当空位。
+ * Fisher-Yates 洗牌取前 count —— 同 (count, seed) 永远产同一份分布。
+ * key 格式与 buildOneStudyTable 一致:`col(0..1),row(0..9),seatIndex(0..3)`
+ */
+function computeFreeSeats(count: number, seed: number): Set<string> {
+  const all: string[] = [];
+  for (let ci = 0; ci < STUDY_COL_XS.length; ci++) {
+    for (let ri = 0; ri < STUDY_ROW_COUNT; ri++) {
+      for (let si = 0; si < 4; si++) {
+        all.push(`${ci},${ri},${si}`);
+      }
+    }
+  }
+  const rng = mulberry32(seed);
+  for (let i = all.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [all[i], all[j]] = [all[j], all[i]];
+  }
+  return new Set(all.slice(0, Math.max(0, Math.min(count, all.length))));
 }
 
 /** 书架/柱/端板盒/壁插/窗边桌 —— 静态布局,debug rebuild 不动。 */
@@ -515,8 +555,9 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   }
 
   // ── 桌区构建器(静态部分构完后调用一次,rebuild 时再调用)──
-  // FREE_SEATS:key = col(0..1),row(0..9),si(侧-1[xo-0.45=0, +0.45=1], 侧+1[2, 3])
-  const FREE_SEATS = new Set(['0,1,1', '1,4,0', '0,2,3', '1,6,0', '0,7,3', '1,8,2']);
+  // 空位 key = col(0..1),row(0..9),si(侧-1[xo-0.45=0, +0.45=1], 侧+1[2, 3])
+  // 空位集合由 seed 化 RNG 散布 —— 拖 GUI slider 时确定性重算。
+  let freeSeats: Set<string> = computeFreeSeats(params.freeSeatCount, params.freeSeed);
   let currentParams: DebugParams = params;
   let furIdx = 0;
 
@@ -578,7 +619,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
         );
         tableColliders.push(cb);
         pushTableHelper(cb);
-        if (!FREE_SEATS.has(`${ci},${ri},${si}`)) {
+        if (!freeSeats.has(`${ci},${ri},${si}`)) {
           const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side === 1 ? 0 : Math.PI);
           cat.position.set(sx, 0.45, sz);
           tableZone.add(cat);
@@ -609,6 +650,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     for (const h of tableHelpers) scene.remove(h);
     tableHelpers.length = 0;
     furIdx = 0; // 重建时毛色从头排起,前后排布稳定
+    freeSeats = computeFreeSeats(p.freeSeatCount, p.freeSeed);
 
     const rows = studyRowZs(p.rowSpacing);
     const tablePlacements = buildStudyTablePlacements(p.rowSpacing);
