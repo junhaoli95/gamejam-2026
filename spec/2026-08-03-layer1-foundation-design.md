@@ -99,6 +99,8 @@ export function findPath(
 
 通过 Layer 1 facade `getSharedState()` 拿 `SharedState`(见 §6),minimap 自身不直接访问 Three.js scene。
 
+**实时性(硬约束,不是写死)**:minimap 每次渲染都从 `getSharedState()` 现读当前帧的 `player.x/z/yaw`、`outlets`、`npcs`、`path` —— **禁止任何形式的预渲染 / 启动时快照 / 静态截图**。玩家移动 → 橙点必须立即跟随;朝向变 → 朝向线必须立即转;NPC 走动 / outlet 占用状态变 → 必须立即反映。30 FPS 节流是性能取舍,不是"可以不实时"的借口。验收 §11-C 的"WASD 移动 → 橙点实时跟随"是硬门槛,不通过 = Layer 1 不合格。
+
 ### 4.3 渲染元素(只读 Layer 1)
 
 | 元素 | 颜色 | 形状 |
@@ -335,12 +337,12 @@ A* 是纯函数 `(grid, start, goal) → path`,在 mock grid 上可单测全绿�
 
 - [ ] `AGENTS.md` 新增 rule 11，标题 `## 硬性规则` 下编号 11
 - [ ] rule 11 含：独立 agent 定义、worktree 命令、文件边界、接口契约、PR 合并顺序
-- [ ] rule 7 的 commit 作者身份从 `Kimi K3` 改为 `glm5.2`（之前已改 git config，文档同步）
+- [ ] rule 7 的 commit 作者身份改为当前 agent 名（每个 agent 独立命名；主 agent 现名 `Snake`）
 
 ### G. Git / 流程
 
 - [ ] 分支 `feat/layer1-foundation`，从 `main`（PR #5 merge 后）切出
-- [ ] commit 作者 `glm5.2 <glm5.2@agent.local>`（`git log --format='%an %ae' -5` 全是 glm5.2）
+- [ ] commit 作者 `Snake <snake@agent.local>`（`git log --format='%an %ae' -5` 全是 Snake；其他独立 agent 各用自己的命名）
 - [ ] commit 信息英文，格式 `type: summary`
 - [ ] PR 标题 `feat(layer1): foundation for parallel agents — grid/pathfinding/config/minimap`
 - [ ] PR body 含 spec 链接 + 验收 checklist 勾选截图/输出
