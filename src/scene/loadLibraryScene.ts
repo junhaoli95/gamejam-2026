@@ -208,6 +208,8 @@ export interface LibraryScene {
   player: THREE.Group;
   /** 静态+桌区合并碰撞体(玩家与相机共用)。rebuild 时原地刷新,引用稳定。 */
   colliders: THREE.Box3[];
+  /** 所有电位位置(柱电位+端板盒+桌电位+壁插),供 SharedState/minimap 消费。 */
+  outlets: Array<{ x: number; z: number }>;
   update: (dt: number) => void;
   /** Debug overlay 用:按新 params 拆除并重建桌区(桌椅猫+电位+collider+helper)。 */
   rebuildTableZone: (params: DebugParams) => void;
@@ -698,10 +700,28 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   }
 
   let t = 0;
+
+  const outletPositions: Array<{ x: number; z: number }> = [];
+  for (const c of poweredColumns) {
+    outletPositions.push({ x: c.x + c.face * (MODEL_DIMS.column.w / 2), z: c.z });
+  }
+  for (const b of endPanelBoxes) {
+    outletPositions.push({ x: b.x, z: b.z - MODEL_DIMS.column.d / 2 });
+  }
+  for (const p of staticPlacements) {
+    if (p.kind === 'wallSocket') outletPositions.push({ x: p.x, z: p.z });
+  }
+  for (const tp of buildStudyTablePlacements(params.rowSpacing)) {
+    for (const ox of STUDY_OUTLET_OFFSETS) {
+      outletPositions.push({ x: tp.x + ox, z: tp.z });
+    }
+  }
+
   return {
     scene,
     player,
     colliders,
+    outlets: outletPositions,
     update: (dt: number) => {
       // 电位呼吸脉冲 —— "发光 = 可充电"的视觉语言
       t += dt;
