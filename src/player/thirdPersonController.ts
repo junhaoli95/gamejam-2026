@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CONFIG } from '../game/config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Third-person controller (placeholder scaffold)
@@ -13,6 +14,7 @@ import * as THREE from 'three';
 
 export interface ThirdPersonController {
   update: (dt: number) => void;
+  getYaw: () => number;
 }
 
 interface ControllerOptions {
@@ -24,20 +26,6 @@ interface ControllerOptions {
   /** 指针未锁定时显示的提示遮罩。 */
   overlay: HTMLElement;
 }
-
-const WALK_SPEED = 3.0;
-const SPRINT_SPEED = 5.6;
-const PLAYER_RADIUS = 0.32;
-const TURN_LERP = 14;
-
-const CAM_DIST = 2.7;
-const CAM_SIDE = 0.35;
-const CAM_UP = 1.35;
-const PITCH_MIN = -0.12; // 微抬头上限
-const PITCH_MAX = 0.4;   // 低头下限(相机最高 ~2.4m,看不穿 3.4m 柱与 2.4m 书架)
-const MOUSE_SENS = 0.0023;
-const CAM_COLLIDE_PAD = 0.25;
-const CAM_COLLIDE_STEPS = 8;
 
 export function createThirdPersonController(opts: ControllerOptions): ThirdPersonController {
   const { camera, dom, player, colliders, bounds, overlay } = opts;
@@ -58,9 +46,9 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
   });
   document.addEventListener('mousemove', (e: MouseEvent) => {
     if (document.pointerLockElement !== dom) return;
-    yaw -= e.movementX * MOUSE_SENS;
-    pitch += e.movementY * MOUSE_SENS;
-    pitch = Math.min(PITCH_MAX, Math.max(PITCH_MIN, pitch));
+    yaw -= e.movementX * CONFIG.camera.mouseSens;
+    pitch += e.movementY * CONFIG.camera.mouseSens;
+    pitch = Math.min(CONFIG.camera.pitchMax, Math.max(CONFIG.camera.pitchMin, pitch));
   });
   window.addEventListener('keydown', (e: KeyboardEvent) => keys.add(e.code));
   window.addEventListener('keyup', (e: KeyboardEvent) => keys.delete(e.code));
@@ -70,13 +58,13 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
     const p = player.position;
     for (const b of colliders) {
       if (
-        p.x > b.min.x - PLAYER_RADIUS && p.x < b.max.x + PLAYER_RADIUS &&
-        p.z > b.min.z - PLAYER_RADIUS && p.z < b.max.z + PLAYER_RADIUS
+        p.x > b.min.x - CONFIG.player.radius && p.x < b.max.x + CONFIG.player.radius &&
+        p.z > b.min.z - CONFIG.player.radius && p.z < b.max.z + CONFIG.player.radius
       ) {
         if (axis === 'x') {
-          p.x = p.x < (b.min.x + b.max.x) / 2 ? b.min.x - PLAYER_RADIUS : b.max.x + PLAYER_RADIUS;
+          p.x = p.x < (b.min.x + b.max.x) / 2 ? b.min.x - CONFIG.player.radius : b.max.x + CONFIG.player.radius;
         } else {
-          p.z = p.z < (b.min.z + b.max.z) / 2 ? b.min.z - PLAYER_RADIUS : b.max.z + PLAYER_RADIUS;
+          p.z = p.z < (b.min.z + b.max.z) / 2 ? b.min.z - CONFIG.player.radius : b.max.z + CONFIG.player.radius;
         }
       }
     }
@@ -92,9 +80,9 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
   function cameraClipTest(point: THREE.Vector3): boolean {
     for (const b of colliders) {
       if (
-        point.x > b.min.x - CAM_COLLIDE_PAD && point.x < b.max.x + CAM_COLLIDE_PAD &&
-        point.y > b.min.y - CAM_COLLIDE_PAD && point.y < b.max.y + CAM_COLLIDE_PAD &&
-        point.z > b.min.z - CAM_COLLIDE_PAD && point.z < b.max.z + CAM_COLLIDE_PAD
+        point.x > b.min.x - CONFIG.camera.collidePad && point.x < b.max.x + CONFIG.camera.collidePad &&
+        point.y > b.min.y - CONFIG.camera.collidePad && point.y < b.max.y + CONFIG.camera.collidePad &&
+        point.z > b.min.z - CONFIG.camera.collidePad && point.z < b.max.z + CONFIG.camera.collidePad
       ) {
         return true;
       }
@@ -103,6 +91,7 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
   }
 
   return {
+    getYaw: () => yaw,
     update: (dt: number) => {
       // ── 移动(相对相机朝向)──
       const fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
@@ -119,7 +108,7 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
         mx /= len;
         mz /= len;
 
-        const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? SPRINT_SPEED : WALK_SPEED;
+        const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? CONFIG.player.sprintSpeed : CONFIG.player.walkSpeed;
         player.position.x += mx * speed * dt;
         resolveAxis('x');
         player.position.z += mz * speed * dt;
@@ -129,7 +118,7 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
         const targetRot = Math.atan2(-mx, -mz);
         let delta = targetRot - player.rotation.y;
         delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-        player.rotation.y += delta * Math.min(1, TURN_LERP * dt);
+        player.rotation.y += delta * Math.min(1, CONFIG.player.turnLerp * dt);
       }
 
       // 场地边界
@@ -140,18 +129,18 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
 
       // ── 越肩相机 ──
       euler.set(pitch, yaw, 0);
-      camOffset.set(CAM_SIDE, CAM_UP, CAM_DIST).applyEuler(euler);
+      camOffset.set(CONFIG.camera.side, CONFIG.camera.up, CONFIG.camera.dist).applyEuler(euler);
       headPos.copy(player.position);
       headPos.y += 1.4;
       desiredCam.copy(player.position).add(camOffset);
 
       // 相机防穿:从头部向机位步进,撞墙前停
       let t = 1;
-      for (let i = 1; i <= CAM_COLLIDE_STEPS; i++) {
-        const s = i / CAM_COLLIDE_STEPS;
+      for (let i = 1; i <= CONFIG.camera.collideSteps; i++) {
+        const s = i / CONFIG.camera.collideSteps;
         tmp.lerpVectors(headPos, desiredCam, s);
         if (cameraClipTest(tmp)) {
-          t = Math.max(0.1, (i - 1) / CAM_COLLIDE_STEPS);
+          t = Math.max(0.1, (i - 1) / CONFIG.camera.collideSteps);
           break;
         }
       }
