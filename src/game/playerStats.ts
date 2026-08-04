@@ -5,5 +5,5 @@ export interface PlayerStatsOptions {
 }
 
 export function mountPlayerStats(_opts: PlayerStatsOptions): void {
-  console.log('[stub] mountPlayerStats called — PR #8 will implement');
+  console.log('[stub] mountPlayerStats called — PR #10 will implement');
 }

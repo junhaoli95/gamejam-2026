@@ -6,5 +6,5 @@ export interface PhoneHudOptions {
 }
 
 export function mountPhoneHud(_opts: PhoneHudOptions): void {
-  console.log('[stub] mountPhoneHud called — PR #7 will implement');
+  console.log('[stub] mountPhoneHud called — PR #9 will implement');
 }
