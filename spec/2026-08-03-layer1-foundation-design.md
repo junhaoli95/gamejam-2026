@@ -22,8 +22,8 @@
 | `src/game/config.ts` | 全局数值单一数据源 | ~60 |
 | `src/ui/minimap.ts` | 2D canvas 俯视 renderer(只读) | ~150 |
 | `src/main.ts` mount 位 | `mountPhoneHud` / `mountPlayerStats` 空调用 + SharedState facade | ~30 |
-| `src/ui/phoneHud.ts` | `mountPhoneHud` 空 stub(PR #7 替换实现) | ~10 |
-| `src/game/playerStats.ts` | `mountPlayerStats` 空 stub(PR #8 替换实现) | ~10 |
+| `src/ui/phoneHud.ts` | `mountPhoneHud` 空 stub(PR #9 替换实现) | ~10 |
+| `src/game/playerStats.ts` | `mountPlayerStats` 空 stub(PR #10 替换实现) | ~10 |
 | `src/platform/sharedState.ts` | `getSharedState()` facade + `collectOutlets()` | ~40 |
 | `src/scene/loadLibraryScene.ts` 扩展 | `LibraryScene` 接口加 `outlets: Array<{x,z,occupied}>` 字段 | ~15 |
 | `vitest` 装好 | dev dep + test 脚本 | — |
@@ -31,8 +31,8 @@
 
 ### 不包含(留给 独立 agent PR)
 
-- 手机 HUD UI 实现 → PR #7
-- dash pip + 电池消耗实现 → PR #8
+- 手机 HUD UI 实现 → PR #9
+- dash pip + 电池消耗实现 → PR #10
 - NPC AI、新场景元素、新桌椅
 - 地形编辑器(根本不做 —— 见 §10 决策记录)
 
@@ -112,13 +112,13 @@ export function findPath(
 | (将来)NPC | `#8a8a8a` 灰 | 3px 圆点 |
 | (将来)path | `#ffe066` 黄 | polyline |
 
-"将来"项 = 接口已留,Layer 1 不画(数据为空)。独立 agent PR #7/#9 填实数据后自动出现。
+"将来"项 = 接口已留,Layer 1 不画(数据为空)。独立 agent PR #9/#11 填实数据后自动出现。
 
 ### 4.4 不做的事(Layer 1 边界)
 
-- 不做交互(点击/缩放/平移)→ PR #7 phone map app 包一层做
-- 不做 path overlay → path 数据来自 PR #8 dash 系统不来自 minimap
-- 不做 NPC 点 → PR #9 NPC AI 接入后自动显示
+- 不做交互(点击/缩放/平移)→ PR #9 phone map app 包一层做
+- 不做 path overlay → path 数据来自 PR #10 dash 系统不来自 minimap
+- 不做 NPC 点 → PR #11 NPC AI 接入后自动显示
 - 不做 raycast / 拖动 / 编辑
 
 ## 5. `src/game/config.ts` 单一数据源
@@ -143,13 +143,13 @@ export const CONFIG = {
     mouseSens: 0.0023,
   },
   dash: {
-    pipCount: 3,           // PR #8 填实
+    pipCount: 3,           // PR #10 填实
     pipCost: 1,            // 一次冲刺耗几颗
     durationS: 0.6,
     cooldownS: 1.5,
   },
   battery: {
-    startPercent: 1.0,     // PR #8 填实
+    startPercent: 1.0,     // PR #10 填实
     drainMove: 0.5,        // %/s 走动
     drainSprint: 2.0,      // %/s 冲刺
     drainApp: 1.0,         // %/s 开 app
@@ -157,12 +157,12 @@ export const CONFIG = {
     totalGameTimeS: 180,
   },
   npc: {
-    count: 3,              // PR #9 填
+    count: 3,              // PR #11 填
   },
 } as const;
 ```
 
-**Layer 1 只填 `player` + `camera`(从 controller 常量搬过来)。`dash` + `battery` + `npc` 列 schema 值占位,独立 agent PR #8/#9 填实。**
+**Layer 1 只填 `player` + `camera`(从 controller 常量搬过来)。`dash` + `battery` + `npc` 列 schema 值占位,独立 agent PR #10/#11 填实。**
 
 `thirdPersonController.ts` 改为 `import { CONFIG } from '../game/config'` 用 `CONFIG.player.*` / `CONFIG.camera.*`。debug overlay 的 bounds 同样从 config 拿(或 Layer 1 加 `CONFIG.world: { w, d }`)。
 
@@ -172,8 +172,8 @@ export const CONFIG = {
 
 ```ts
 // Layer 1 后 main.ts 末尾:
-mountPhoneHud({ getSharedState, onAppAction });   // PR #7 独立 agent 填实
-mountPlayerStats({ getSharedState });              // PR #8 独立 agent 填实
+mountPhoneHud({ getSharedState, onAppAction });   // PR #9 独立 agent 填实
+mountPlayerStats({ getSharedState });              // PR #10 独立 agent 填实
 ```
 
 Layer 1 提供两个空 stub 函数(分别在 `src/ui/phoneHud.ts` 和 `src/game/playerStats.ts`,签名 `export function mountPhoneHud(opts) { /* PR#7 替换 */ }`),独立 agent 只替换所在文件实现。main.ts 调用点不动 —— 这是反冲突的关键:独立 agent 不改 main.ts。
@@ -183,10 +183,10 @@ Layer 1 提供两个空 stub 函数(分别在 `src/ui/phoneHud.ts` 和 `src/game
 ```ts
 export interface SharedState {
   player: { x: number; z: number; yaw: number };
-  battery: number;       // 0-1,PR #8 填
-  pips: number;          // 0-3,PR #8 填
+  battery: number;       // 0-1,PR #10 填
+  pips: number;          // 0-3,PR #10 填
   outlets: Array<{ x: number; z: number; occupied: boolean }>;
-  npcs: Array<{ x: number; z: number; state: string }>;  // PR #9 填
+  npcs: Array<{ x: number; z: number; state: string }>;  // PR #11 填
   path?: Array<{ x: number; z: number }>;                // phone map app 用
 }
 
@@ -208,10 +208,10 @@ export function createSharedStateFacade(
   return {
     getSharedState: () => ({
       player: { x: player.position.x, z: player.position.z, yaw: controller.getYaw() },
-      battery: 1.0,        // stub, PR #8 填
+      battery: 1.0,        // stub, PR #10 填
       pips: 3,             // stub
-      outlets: outlets.map(o => ({ ...o, occupied: false })),  // PR #9 真实化
-      npcs: [],            // stub, PR #9 填
+      outlets: outlets.map(o => ({ ...o, occupied: false })),  // PR #11 真实化
+      npcs: [],            // stub, PR #11 填
       path: undefined,
     }),
   };
@@ -230,7 +230,7 @@ export function createSharedStateFacade(
 
 ## 8. AGENTS.md rule 11(并行独立 agent + worktree)
 
-**"独立 agent" 定义**:用户自己开的独立 opencode 会话,不是主 agent(本会话)dispatch 的 subagent。两独立 agent 各占一个 worktree、各自一个 opencode 会话窗口、各自一个 feature 分支,并行干活。主 agent(本会话)负责 Layer 1 地基 + review 两 PR + 协调冲突,不执行 PR #7/#8 实现。
+**"独立 agent" 定义**:用户自己开的独立 opencode 会话,不是主 agent(本会话)dispatch 的 subagent。两独立 agent 各占一个 worktree、各自一个 opencode 会话窗口、各自一个 feature 分支,并行干活。主 agent(本会话)负责 Layer 1 地基 + review 两 PR + 协调冲突,不执行 PR #9/#10 实现。
 
 ```markdown
 11. **并行独立 agent 工作流(地基后启用)**:
@@ -249,15 +249,15 @@ export function createSharedStateFacade(
 ## 9. PR 排序
 
 ```
-PR #6  Layer 1 (主 agent, 6-8h)              ← 本 spec
+PR #8  Layer 1 (主 agent, 6-8h)              ← 本 spec
   ↓ merge
-PR #7  手机 HUD + 地图 app (独立 agent A, worktree #1)  4-6h
-PR #8  dash pip + 电池消耗 (独立 agent B, worktree #2)  6-8h  ← 用户的"丙"
+PR #9  手机 HUD + 地图 app (独立 agent A, worktree #1)  4-6h
+PR #10  dash pip + 电池消耗 (独立 agent B, worktree #2)  6-8h  ← 用户的"丙"
   ↓ 两 PR 都开
 主 agent(本会话)审 → 用户 merge #7 → #8 rebase → merge #8
   ↓
-PR #9  NPC AI (consume pathfinding)  ~4h
-PR #10 polish + itch 上传
+PR #11  NPC AI (consume pathfinding)  ~4h
+PR #12 polish + itch 上传
 ```
 
 ## 10. 决策记录
@@ -315,7 +315,7 @@ A* 是纯函数 `(grid, start, goal) → path`,在 mock grid 上可单测全绿�
 - [ ] **WASD 移动 → 橙点实时跟随**（30 FPS 节流，不强求 60）
 - [ ] **鼠标转视角 → 朝向线同步转**
 - [ ] 按 F 切 collider helper 时，minimap 不受影响（两套独立渲染）
-- [ ] minimap 无交互（点击/拖动不响应）—— Layer 1 边界，交互留给 PR #7
+- [ ] minimap 无交互（点击/拖动不响应）—— Layer 1 边界，交互留给 PR #9
 
 ### D. config.ts 单一数据源（代码 + 行为双验）
 
@@ -323,7 +323,7 @@ A* 是纯函数 `(grid, start, goal) → path`,在 mock grid 上可单测全绿�
 - [ ] 该文件改 `import { CONFIG } from '../game/config'`，用 `CONFIG.player.walkSpeed` 等
 - [ ] **行为零回归**：dev 下走/跑/转视角/碰撞/相机防穿 手感与 PR #5 merge 时一致（你上次玩过的 v6 状态）
 - [ ] `grep -n "WALK_SPEED\|SPRINT_SPEED\|CAM_DIST" src/player/thirdPersonController.ts` 应无输出
-- [ ] `CONFIG.dash` / `CONFIG.battery` / `CONFIG.npc` 字段存在但值为占位（PR #8/#9 填实）—— `grep -A3 "dash:" src/game/config.ts` 能看到 schema
+- [ ] `CONFIG.dash` / `CONFIG.battery` / `CONFIG.npc` 字段存在但值为占位（PR #10/#11 填实）—— `grep -A3 "dash:" src/game/config.ts` 能看到 schema
 
 ### E. SharedState facade + mount 位（调试器验）
 
@@ -341,12 +341,12 @@ A* 是纯函数 `(grid, start, goal) → path`,在 mock grid 上可单测全绿�
 
 ### G. Git / 流程
 
-- [ ] 分支 `feat/layer1-foundation`，从 `main`（PR #5 merge 后）切出
+- [ ] 分支 `feat/layer1-foundation`，从 `main`（PR #7 spec 修订 merge 后）切出
 - [ ] commit 作者 `Snake <snake@agent.local>`（`git log --format='%an %ae' -5` 全是 Snake；其他独立 agent 各用自己的命名）
 - [ ] commit 信息英文，格式 `type: summary`
 - [ ] PR 标题 `feat(layer1): foundation for parallel agents — grid/pathfinding/config/minimap`
 - [ ] PR body 含 spec 链接 + 验收 checklist 勾选截图/输出
-- [ ] push 前 `gh pr view 5 --json state` 确认 PR #5 已 merge（Layer 1 必须基于含 debug overlay 的 main）
+- [ ] push 前 `gh pr view 8 --json state` 确认 PR #8 仍 OPEN（本 PR 自身）
 
 ### H. 不应出现（反向验收）
 
@@ -358,7 +358,7 @@ A* 是纯函数 `(grid, start, goal) → path`,在 mock grid 上可单测全绿�
 
 ## 12. 不在本 spec
 
-- 手机 HUD 视觉设计(GTA5 phone 样式、2 app 布局)→ PR #7 spec
-- dash pip 状态机 + 电池消耗公式 → PR #8 spec
-- NPC AI 状态机 → PR #9 spec
+- 手机 HUD 视觉设计(GTA5 phone 样式、2 app 布局)→ PR #9 spec
+- dash pip 状态机 + 电池消耗公式 → PR #10 spec
+- NPC AI 状态机 → PR #11 spec
 - 场景尺度 backlog(rule 10)的 10x 扩张 → 独立 PR

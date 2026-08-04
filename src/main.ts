@@ -54,10 +54,10 @@ const controller = createThirdPersonController({
   overlay,
 });
 
-// --- SharedState facade (Layer 1 stub; PR #8 fills battery/pips) ---
+// --- SharedState facade (Layer 1 stub; PR #10 fills battery/pips) ---
 const { getSharedState } = createSharedStateFacade(player, controller, outlets);
 
-// --- Mount stubs (PR #7/#8 replace implementations) ---
+// --- Mount stubs (PR #9/#10 replace implementations) ---
 mountPhoneHud({
   getSharedState,
   onAppAction: (action) => console.log('[stub] app action:', action),

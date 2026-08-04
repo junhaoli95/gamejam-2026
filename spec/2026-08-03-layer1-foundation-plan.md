@@ -544,7 +544,7 @@ git commit -m "feat(layer1): LibraryScene.outlets + SharedState interface + faca
 
 **Interfaces:**
 - Consumes: `SharedState`, `AppAction` from `platform/sharedState`
-- Produces: `mountPhoneHud()`, `mountPlayerStats()` (stubs for PR #7/#8)
+- Produces: `mountPhoneHud()`, `mountPlayerStats()` (stubs for PR #9/#10)
 
 - [ ] **Step 1: Create phoneHud.ts stub**
 
@@ -557,8 +557,8 @@ export interface PhoneHudOptions {
 }
 
 export function mountPhoneHud(_opts: PhoneHudOptions): void {
-  // PR #7: GTA5-style phone UI with map + outlet-query apps
-  console.log('[stub] mountPhoneHud called — PR #7 will implement');
+  // PR #9: GTA5-style phone UI with map + outlet-query apps
+  console.log('[stub] mountPhoneHud called — PR #9 will implement');
 }
 ```
 
@@ -572,8 +572,8 @@ export interface PlayerStatsOptions {
 }
 
 export function mountPlayerStats(_opts: PlayerStatsOptions): void {
-  // PR #8: dash pip + battery consumption system
-  console.log('[stub] mountPlayerStats called — PR #8 will implement');
+  // PR #10: dash pip + battery consumption system
+  console.log('[stub] mountPlayerStats called — PR #10 will implement');
 }
 ```
 
@@ -586,7 +586,7 @@ Expected: zero TS errors
 
 ```bash
 git add -A
-git commit -m "feat(layer1): mount stubs — phoneHud + playerStats (PR #7/#8 fill)"
+git commit -m "feat(layer1): mount stubs — phoneHud + playerStats (PR #9/#10 fill)"
 ```
 
 ---
@@ -797,10 +797,10 @@ const controller = createThirdPersonController({
   overlay,
 });
 
-// --- SharedState facade (Layer 1 stub; PR #8 fills battery/pips) ---
+// --- SharedState facade (Layer 1 stub; PR #10 fills battery/pips) ---
 const { getSharedState } = createSharedStateFacade(player, controller, outlets);
 
-// --- Mount stubs (PR #7/#8 replace implementations) ---
+// --- Mount stubs (PR #9/#10 replace implementations) ---
 mountPhoneHud({
   getSharedState,
   onAppAction: (action) => console.log('[stub] app action:', action),
