@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { createLibraryScene, DEFAULT_DEBUG_PARAMS } from './scene/loadLibraryScene';
 import { createThirdPersonController } from './player/thirdPersonController';
+import { createSharedStateFacade } from './platform/sharedState';
+import { createMinimap } from './ui/minimap';
+import { mountPhoneHud } from './ui/phoneHud';
+import { mountPlayerStats } from './game/playerStats';
+import { CONFIG } from './game/config';
 import './style.css';
 
 // --- Renderer ---
@@ -11,14 +16,14 @@ document.body.appendChild(renderer.domElement);
 
 // --- Camera (第三人称越肩:第一人称视野 + 角色可见) ---
 const camera = new THREE.PerspectiveCamera(
-  70,
+  CONFIG.camera.fov,
   window.innerWidth / window.innerHeight,
-  0.05,
-  80,
+  CONFIG.camera.near,
+  CONFIG.camera.far,
 );
 
 // --- Scene ---
-const { scene, player, colliders, update, rebuildTableZone, setColliderHelpersVisible } =
+const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // --- 点击进入指针锁的提示遮罩 ---
@@ -45,9 +50,27 @@ const controller = createThirdPersonController({
   dom: renderer.domElement,
   player,
   colliders,
-  bounds: { w: 32, d: 24 },
+  bounds: { w: CONFIG.world.w, d: CONFIG.world.d },
   overlay,
 });
+
+// --- SharedState facade (Layer 1 stub; PR #8 fills battery/pips) ---
+const { getSharedState } = createSharedStateFacade(player, controller, outlets);
+
+// --- Mount stubs (PR #7/#8 replace implementations) ---
+mountPhoneHud({
+  getSharedState,
+  onAppAction: (action) => console.log('[stub] app action:', action),
+});
+mountPlayerStats({ getSharedState });
+
+// --- Minimap ---
+const minimap = createMinimap();
+
+// --- Debug: expose getSharedState to window for console eval ---
+if (import.meta.env.DEV) {
+  Object.assign(window, { __debug: { getSharedState } });
+}
 
 // --- Resize ---
 window.addEventListener('resize', () => {
@@ -69,7 +92,6 @@ if (import.meta.env.DEV) {
 
 // --- Game loop ---
 // dt clamped so tab-switch won't cause physics/anim jumps.
-// D2 wiring: worldState = game.step(inputState, dt) -> sceneView.render(worldState)
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
@@ -77,5 +99,6 @@ function animate() {
   controller.update(dt);
   update(dt);
   renderer.render(scene, camera);
+  minimap.update(colliders, getSharedState());
 }
 animate();
