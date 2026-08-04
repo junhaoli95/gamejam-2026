@@ -70,6 +70,12 @@ interface OpponentController {
 8. 守住 scoped 边界：单场景图书馆、玩家+2~3 NPC、2 app、3 pip。多场景/多 app/升级树/roguelike 树 全部是 stretch，D11+ 时间够才碰
 9. **调试资源闭环**：MCP 验证完成后**关闭游戏标签页**（`chrome-devtools_close_page`）即可；不要杀 MCP chrome 进程或 dev server —— 渲染中的标签页才是高能耗（10w→40w），闲置进程/空白页可忽略。开发者可能随时接手试玩，dev server 默认保持运行
 10. **场景尺度目标（backlog）**：实地图书馆一层约为当前场景（32×24m）的 10+ 倍面积，目标场景尺度向实地看齐。当前 32×24 为占位阶段尺度，后续统一调整（影响布局密度、NPC 寻路、相机/雾效范围，属大改，单独 PR）
+11. **并行独立 agent 工作流（地基后启用）**：
+    - 主 agent 完成 Layer 1（config + SharedState interface + mount points）后才可并行
+    - 用户在两个独立 opencode 会话里各自开 worktree：`git worktree add ../gamejam-2026-<branch> feat/<x>` 隔离工作目录（两 worktree 共享同一 .git，各自 checkout 各自分支，互不干扰）
+    - 文件边界：UI 独立 agent 只改 `src/ui/` + 替换 `src/ui/phoneHud.ts` 的 mountPhoneHud 实现；Game 独立 agent 只改 `src/game/` + `src/player/` + 替换 `src/game/playerStats.ts` 的 mountPlayerStats 实现；两独立 agent 都不改 `src/main.ts` 的调用点（Layer 1 钉死）
+    - 共享接口 = Layer 1 钉死的 TS interface，独立 agent 只 implements 不 invent
+    - 两 PR 都开 → 主 agent（本会话）review → 用户 merge 先开的 → 后开的 rebase 到新 main
 
 ## AI 协作偏好
 
