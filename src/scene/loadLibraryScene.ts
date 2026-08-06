@@ -562,6 +562,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   let freeSeats: Set<string> = computeFreeSeats(params.freeSeatCount, params.freeSeed);
   let currentParams: DebugParams = params;
   let furIdx = 0;
+  const outletPositions: Array<{ x: number; z: number }> = [];
 
   function buildOneStudyTable(p: Placement, rows: number[]): void {
     const dim = MODEL_DIMS.studyTable;
@@ -661,7 +662,25 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     // 合并到 controller 持引用的 colliders
     colliders.length = 0;
     colliders.push(...staticColliders, ...tableColliders);
-    console.log(`[debug] rebuild table zone: rowSpacing=${p.rowSpacing}, seatSideDist=${p.seatSideDist}, tables=${tablePlacements.length}`);
+
+    // 重算 outlets(原地刷新,facade 持同一引用)
+    outletPositions.length = 0;
+    for (const c of poweredColumns) {
+      outletPositions.push({ x: c.x + c.face * (MODEL_DIMS.column.w / 2), z: c.z });
+    }
+    for (const b of endPanelBoxes) {
+      outletPositions.push({ x: b.x, z: b.z - MODEL_DIMS.column.d / 2 });
+    }
+    for (const p of staticPlacements) {
+      if (p.kind === 'wallSocket') outletPositions.push({ x: p.x, z: p.z });
+    }
+    for (const tp of tablePlacements) {
+      for (const ox of STUDY_OUTLET_OFFSETS) {
+        outletPositions.push({ x: tp.x + ox, z: tp.z });
+      }
+    }
+
+    console.log(`[debug] rebuild table zone: rowSpacing=${p.rowSpacing}, seatSideDist=${p.seatSideDist}, tables=${tablePlacements.length}, outlets=${outletPositions.length}`);
   }
 
   // 异步 GLB swap:静态 kinds(非 studyTable)
@@ -700,22 +719,6 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   }
 
   let t = 0;
-
-  const outletPositions: Array<{ x: number; z: number }> = [];
-  for (const c of poweredColumns) {
-    outletPositions.push({ x: c.x + c.face * (MODEL_DIMS.column.w / 2), z: c.z });
-  }
-  for (const b of endPanelBoxes) {
-    outletPositions.push({ x: b.x, z: b.z - MODEL_DIMS.column.d / 2 });
-  }
-  for (const p of staticPlacements) {
-    if (p.kind === 'wallSocket') outletPositions.push({ x: p.x, z: p.z });
-  }
-  for (const tp of buildStudyTablePlacements(params.rowSpacing)) {
-    for (const ox of STUDY_OUTLET_OFFSETS) {
-      outletPositions.push({ x: tp.x + ox, z: tp.z });
-    }
-  }
 
   return {
     scene,

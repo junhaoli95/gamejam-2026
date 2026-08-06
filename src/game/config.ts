@@ -18,6 +18,7 @@ export const CONFIG = {
     mouseSens: 0.0023,
     collidePad: 0.25,
     collideSteps: 8,
+    dampLambda: 12,
   },
   dash: {
     pipCount: 3,

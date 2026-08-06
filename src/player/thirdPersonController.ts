@@ -76,6 +76,7 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
   const headPos = new THREE.Vector3();
   const lookTarget = new THREE.Vector3();
   const tmp = new THREE.Vector3();
+  const targetCamPos = new THREE.Vector3();
 
   function cameraClipTest(point: THREE.Vector3): boolean {
     for (const b of colliders) {
@@ -144,10 +145,12 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
           break;
         }
       }
-      camera.position.lerpVectors(headPos, desiredCam, t);
-      // 无墙体 mesh 阶段:相机不越出地板边界
-      camera.position.x = Math.min(hw, Math.max(-hw, camera.position.x));
-      camera.position.z = Math.min(hd, Math.max(-hd, camera.position.z));
+      // 算出目标机位(含防穿 clamp)到 targetCamPos,spring-damp 平滑过去
+      targetCamPos.lerpVectors(headPos, desiredCam, t);
+      targetCamPos.x = Math.min(hw, Math.max(-hw, targetCamPos.x));
+      targetCamPos.z = Math.min(hd, Math.max(-hd, targetCamPos.z));
+      const dampFactor = 1 - Math.exp(-CONFIG.camera.dampLambda * dt);
+      camera.position.lerp(targetCamPos, dampFactor);
 
       lookTarget.set(0, 1.15, -2).applyEuler(euler).add(player.position);
       camera.lookAt(lookTarget);
