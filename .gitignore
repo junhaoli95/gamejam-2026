@@ -25,3 +25,6 @@ dist-ssr
 
 # itch.io pack output
 gamejam-2026-*.zip
+
+# Visual companion brainstorming session
+.superpowers/
