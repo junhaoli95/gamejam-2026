@@ -1,7 +1,11 @@
 # 《1% 电》(working title, "Low Battery") 设计文档
 
+> **本文档已被 `spec/MASTER-SPEC.md` 超越。** 锁定决策以 master spec 为准;本文档保留作历史参考。
+>
+> 关键变更:§6 "2 app" → 3 app(加 RADAR);§5 "5 键" → 6 键;§9 phone HUD 视觉已 brainstorming 拍板(GTA smartphone)。
+
 - 日期：2026-08-01
-- 状态：已锁定（brainstorming 完成，待写实施计划）
+- 状态：已被 master spec 超越（历史参考）
 - 索引：本作是 brainstorming 协议的最终产物；下一步走 `writing-plans` 技能拆 D2-D14 任务
 - 仓库：https://github.com/junhaoli95/gamejam-2026
 
