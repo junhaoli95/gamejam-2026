@@ -46,8 +46,8 @@ export interface PlayerStatsOptions {
 }
 
 export interface PlayerStatsHandle {
-  /** 每帧调,推进 dash/battery 状态机 + 写 runtime 镜像 */
-  step: (dt: number, input: DirectionInput) => void;
+  /** 每帧调,推进 dash/battery 状态机 + 写 runtime 镜像(只看 dt;Shift 触发通过 requestDash 单独发) */
+  step: (dt: number) => void;
   /** Shift 边沿触发,通过三道门则消费 1 pip + 进 dashing,返回是否成功 */
   requestDash: (input: DirectionInput) => boolean;
   /** 当前速度倍率:idle/cooldown=1, dashing=CONFIG.dash.dashMult */
@@ -88,7 +88,7 @@ export function mountPlayerStats(opts: PlayerStatsOptions): PlayerStatsHandle {
   opts.runtime.pips = dash.pips;
 
   return {
-    step(dt, _input) {
+    step(dt) {
       updateDash(dash, dashCfg, dt);
       updateBattery(battery, batteryCfg, opts.runtime.appOpen, dt);
       // 写 runtime 镜像(供 SharedState wrapper 经 main.ts 读出)
