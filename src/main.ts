@@ -54,15 +54,29 @@ const controller = createThirdPersonController({
   overlay,
 });
 
-// --- SharedState facade (Layer 1 stub; PR #10 fills battery/pips) ---
-const { getSharedState } = createSharedStateFacade(player, controller, outlets);
+// --- SharedState facade:Layer 1 stub 返回固定 battery=1.0 / pips=3;
+// PR #10 在 main 包一层 wrap,用 runtime 真值覆盖 battery/pips 字段(sharedState.ts 文件 0 改,§0.3)。
+const { getSharedState: getRawSharedState } = createSharedStateFacade(player, controller, outlets);
 
-// --- Mount stubs (PR #9/#10 replace implementations) ---
+// runtime 槽:mountPlayerStats 把 battery.percent / dash.pips 实时写进,battery/pips 反映给 SharedState wrap
+const runtime = {
+  battery: CONFIG.battery.startPercent,
+  pips: CONFIG.dash.startPips,
+  appOpen: { RADAR: false, MAP: false, QUERY: false },
+};
+const playerStats = mountPlayerStats({ runtime });
+
+/** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值(给 phone HUD / minimap / __debug 读)。 */
+function getSharedState() {
+  const s = getRawSharedState();
+  return { ...s, battery: runtime.battery, pips: runtime.pips };
+}
+
+// --- Mount phone HUD stub(Sam 在 PR #9 替换 mountPhoneHud 实现,调用点不动)---
 mountPhoneHud({
   getSharedState,
   onAppAction: (action) => console.log('[stub] app action:', action),
 });
-mountPlayerStats({ getSharedState });
 
 // --- Minimap ---
 const minimap = createMinimap();
@@ -98,6 +112,8 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.1);
   controller.update(dt);
   update(dt);
+  // PR #10: 推进资源状态机(本 commit 仅 battery 空载 idle 衰减;Shift dash 触发由 #7 接)
+  playerStats.step(dt, { fwd: 0, strafe: 0 });
   renderer.render(scene, camera);
   minimap.update(colliders, getSharedState());
 }
