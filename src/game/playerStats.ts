@@ -10,8 +10,8 @@
 //   3. 写回 runtime.battery / runtime.pips(供 SharedState wrap 读出)
 //
 // 端到端:
-//   main.ts animate 主循环每帧 `playerStats.step(dt, dirInput)`
-//   外加 Shift 边沿触发 `playerStats.requestDash(dirInput)`(controller 在 commit #7 接)
+//   main.ts animate 主循环每帧 `playerStats.step(dt)` 推进状态机,
+//   Shift 边沿触发 `playerStats.requestDash(dirInput)`(主循环经由 controller.getInput 喂)
 //
 // 平台约束:无 three/DOM/window 依赖(rule 1),测试处纯 TS。
 // ─────────────────────────────────────────────────────────────────────────────
