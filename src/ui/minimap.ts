@@ -42,9 +42,7 @@ export function createMinimap(): MinimapHandle {
     ctx.fillStyle = '#e8e4d8';
     ctx.fillRect(0, 0, MINI_W, MINI_H);
 
-    if (colliders !== lastColliders) {
-      lastColliders = colliders;
-    }
+    lastColliders = colliders;
     ctx.fillStyle = '#5a5a52';
     for (const b of lastColliders) {
       const x = toX(b.min.x);
