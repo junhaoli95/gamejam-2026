@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { createLibraryScene, DEFAULT_DEBUG_PARAMS } from './scene/loadLibraryScene';
 import { createThirdPersonController } from './player/thirdPersonController';
 import { createSharedStateFacade } from './platform/sharedState';
-import { createMinimap } from './ui/minimap';
 import { mountPhoneHud } from './ui/phoneHud';
 import { mountPlayerStats } from './game/playerStats';
 import { CONFIG } from './game/config';
@@ -79,9 +78,6 @@ mountPhoneHud({
   onAppAction: (action) => console.log('[stub] app action:', action),
 });
 
-// --- Minimap ---
-const minimap = createMinimap();
-
 // --- Debug: expose getSharedState to window for console eval ---
 if (import.meta.env.DEV) {
   Object.assign(window, { __debug: { getSharedState } });
@@ -125,6 +121,5 @@ function animate() {
   controller.update(dt);
   update(dt);
   renderer.render(scene, camera);
-  minimap.update(colliders, getSharedState());
 }
 animate();
