@@ -15,6 +15,9 @@ import { CONFIG } from '../game/config';
 export interface ThirdPersonController {
   update: (dt: number) => void;
   getYaw: () => number;
+  /** 读取这一帧的方向/Shift 状态(ShiftEdge 为边沿触发,本帧内只可读一次,会消费 prev shift 标记)。
+   *  供主循环把 shiftEdge 喂给 playerStats.requestDash 把方向喂给 playerStats.step。 */
+  getInput: () => { fwd: number; strafe: number; shiftEdge: boolean };
 }
 
 interface ControllerOptions {
@@ -25,14 +28,17 @@ interface ControllerOptions {
   bounds: { w: number; d: number };
   /** 指针未锁定时显示的提示遮罩。 */
   overlay: HTMLElement;
+  /** PR #10:dash 倍速回调。idle/cooldown=1, dashing=CONFIG.dash.dashMult。controller 不持有 game 状态,只读外部 mult。 */
+  getDashMult: () => number;
 }
 
 export function createThirdPersonController(opts: ControllerOptions): ThirdPersonController {
-  const { camera, dom, player, colliders, bounds, overlay } = opts;
+  const { camera, dom, player, colliders, bounds, overlay, getDashMult } = opts;
 
   let yaw = 0;           // 0 = 相机在角色 +z 后方,看向 -z(书库深处)
   let pitch = 0.16;      // 默认微低头("镜头要向下一点")
   const keys = new Set<string>();
+  let prevShift = false; // Shift 边沿触发 dash(requestDash 仅按 shift-down 第一帧触发)
 
   // 监听 window:遮罩层覆盖 canvas 时点击事件不会落到 dom 上
   window.addEventListener('click', () => {
@@ -93,6 +99,14 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
 
   return {
     getYaw: () => yaw,
+    getInput: () => {
+      const fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+      const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+      const shiftNow = keys.has('ShiftLeft') || keys.has('ShiftRight');
+      const shiftEdge = shiftNow && !prevShift;
+      prevShift = shiftNow;
+      return { fwd, strafe, shiftEdge };
+    },
     update: (dt: number) => {
       // ── 移动(相对相机朝向)──
       const fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
@@ -109,7 +123,9 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
         mx /= len;
         mz /= len;
 
-        const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? CONFIG.player.sprintSpeed : CONFIG.player.walkSpeed;
+        // PR #10:速度由 dash 倍速决定(idle/cooldown=walkSpeed, dashing=walkSpeed × dashMult),
+        // Shift 不再做持续 sprint(requestDash 由主循环边沿触发,这里只读 mult)
+        const speed = CONFIG.player.walkSpeed * getDashMult();
         player.position.x += mx * speed * dt;
         resolveAxis('x');
         player.position.z += mz * speed * dt;
