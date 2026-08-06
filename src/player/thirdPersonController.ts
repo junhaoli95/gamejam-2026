@@ -152,6 +152,14 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
       const dampFactor = 1 - Math.exp(-CONFIG.camera.dampLambda * dt);
       camera.position.lerp(targetCamPos, dampFactor);
 
+      // backlog #001:damp 后再 clamp 相机距 head 下限,贴墙不近脸(业界 90% 三人称标准)
+      const dir = tmp.subVectors(camera.position, headPos);
+      const dist = dir.length();
+      if (dist < CONFIG.camera.minDist) {
+        dir.multiplyScalar(CONFIG.camera.minDist / dist);
+        camera.position.copy(headPos).add(dir);
+      }
+
       lookTarget.set(0, 1.15, -2).applyEuler(euler).add(player.position);
       camera.lookAt(lookTarget);
     },
