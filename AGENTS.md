@@ -67,6 +67,7 @@ interface OpponentController {
    - 任何 push 前先 `gh pr view <n> --json state` 确认 PR 仍 OPEN（防止往已 merge 分支续推的事故）
    - commit 作者身份：仓库本地 `user.name` 设为当前 agent 名（主 agent 现 `Snake`；每个独立 agent 各用自己的命名；只设 repo-local，勿动全局配置）
    - **例外（docs-only 微修订可直接 commit main）**：纯文档措辞修订（`*.md`、≤10 行、无代码、无 build 影响、spec 未被任何实现消费）可直接 `git switch main && git pull --ff-only && git commit && git push`，无需 PR。适用场景：spec 措辞澄清、README 笔误、AGENTS.md 规则微调。一旦 spec 已被某 PR 引用为实现依据，后续修订必须走 PR（避免已审核的实现与静改的 spec 脱节）。
+   - **PR / commit 语言约定（2026-08-06 加）**：PR title、PR body、review reply 全用中文；commit message 用中文摘要 + 英文 type 前缀（`feat: 中文摘要` / `fix: 中文摘要` / `docs: 中文摘要` / `refactor: 中文摘要` / `chore: 中文摘要`）。历史英文 commit 不补改。理由:项目主语言中文,John review 也用中文,统一便于检索。
 8. 守住 scoped 边界：单场景图书馆、玩家+2~3 NPC、3 app、3 pip。多场景/多 app/升级树/roguelike 树 全部是 stretch，D11+ 时间够才碰。（2026-08-04 解锁：2 app → 3 app，加 RADAR app 补全信息梯度，详见 `spec/MASTER-SPEC.md` §3）
 9. **调试资源闭环**：MCP 验证完成后**关闭游戏标签页**（`chrome-devtools_close_page`）即可；不要杀 MCP chrome 进程或 dev server —— 渲染中的标签页才是高能耗（10w→40w），闲置进程/空白页可忽略。开发者可能随时接手试玩，dev server 默认保持运行
 10. **场景尺度目标（backlog）**：实地图书馆一层约为当前场景（32×24m）的 10+ 倍面积，目标场景尺度向实地看齐。当前 32×24 为占位阶段尺度，后续统一调整（影响布局密度、NPC 寻路、相机/雾效范围，属大改，单独 PR）
