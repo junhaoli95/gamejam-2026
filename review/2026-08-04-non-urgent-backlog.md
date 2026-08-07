@@ -13,6 +13,7 @@
 **优先级**:中(jam 期能做就做,不做不影响 playtest)
 **严重度**:用户体验,无功能 bug
 **PR 出处**:相机 spring-damp 已在 `ff49df6` 落地(档位 1)+ 本条记第二档
+**状态**:**已实施** — `opencode/proud-wolf` (PR #11,David) `feat(player): camera minDist clamp (backlog #001)` commit `44ad3d5`。`CONFIG.camera.minDist=1.4` 加入;`thirdPersonController.ts` 5 行 clamp 在 damp 后插。详见 `review/2026-08-06-pr10-pr11-review.md` §2.5。**遗留**:NaN 防护 `dist=0` 守卫待 PR #12 顺手加(3 字符:`dist > 1e-6 &&`),详 review §4.1。
 **归 PR**:PR #10(game agent,改 `thirdPersonController.ts` + `config.ts`)
 
 **现象**:
@@ -60,6 +61,7 @@ if (dist < CONFIG.camera.minDist) {
 **优先级**:低(warning 无功能影响)
 **严重度**:零(纯控制台噪音)
 **归 PR**:PR #10 或任何顺手 agent
+**状态**:**已实施** — `opencode/proud-wolf` (PR #11,David) `feat(main): Clock->Timer + wire Shift edge to requestDash + dashMult speed` commit `1c17ada`。`main.ts` `new THREE.Timer()` + `timer.update()` + `timer.getDelta()`,console 实测无 deprecation warning。详见 `review/2026-08-06-pr10-pr11-review.md` §2.6。
 
 **现象**:`src/main.ts:95` 控制台报 `THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.`
 

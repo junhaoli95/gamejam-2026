@@ -386,8 +386,8 @@ MCP 验证完 → `chrome-devtools_navigate_page` 到 `about:blank` 停渲染(�
 
 | # | 问题 | 优先级 | 归 PR | 状态 |
 |---|---|---|---|---|
-| 001 | 相机贴墙仍感拉近(damp 后第二档) | 中 | #10 | 待做(minDist=1.4 clamp,5 行) |
-| 002 | THREE.Clock deprecated | 低 | #10 或顺手 | 待做(换 Timer,1 行) |
+| 001 | 相机贴墙仍感拉近(damp 后第二档) | 中 | #11 | **已实施**(PR #11 `44ad3d5`,`camera.minDist=1.4` 5 行 clamp in damp 后);NaN 守卫遗留 PR #12(详 review 2026-08-06 §4.1) |
+| 002 | THREE.Clock deprecated | 低 | #11 | **已实施**(PR #11 `1c17ada`,`new THREE.Timer()` + `update()`/`getDelta()`;console 实测无 deprecation warning) |
 
 ---
 
@@ -400,7 +400,7 @@ MCP 验证完 → `chrome-devtools_navigate_page` 到 `about:blank` 停渲染(�
 | 同时实时点光源 | ≤4 |
 | 粒子预算 | ≤30 |
 | 对象池 | NPC/桩/粒子全程池化 |
-| prod bundle | ≤620KB(vitest devDep 自动剥离;lil-gui dev-only dynamic import) |
+| prod bundle | ≤640KB(post Phone HUD PR #10 / 资源系统 PR #11 实测 634.87 kB raw / gzip 163.65 kB — 架构 CSS 引入前 ≤620 kB 已不敷;vitest devDep 自动剥离;lil-gui dev-only dynamic import) |
 
 ---
 
