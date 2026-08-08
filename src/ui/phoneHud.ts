@@ -655,19 +655,18 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     }
     setActiveApp(target);
     // onAppAction emit per §10.2:
-    //   map    → toggle-map
-    //   query  → query-outlets
-    //   radar  → ⚠ §16-S1: AppAction union lacks 'toggle-radar' (file boundary
-    //            forbids touching src/platform/sharedState.ts).
-    //            Emitting on this PR is left to Snake's 1-line docs follow-up;
-    //            internal app state still flips correctly.
+    //   map    → toggle-app map
+    //   query  → toggle-app query
+    //   radar  → ⚠ §16-S1: AppAction union now supports 'radar' (PR #12 §2.1);
+    //            exclusive-emit wiring lands in commit 7 — internal app state
+    //            still flips correctly in the interim.
     //   home   → never passed here (handled by early-return above when target
     //            matches the active app); no close action either since master
     //            §7.3 reserves 'close' for a future total-HUD teardown path.
     if (target === 'map') {
-      opts.onAppAction({ kind: 'toggle-map' });
+      opts.onAppAction({ kind: 'toggle-app', app: 'map' });
     } else if (target === 'query') {
-      opts.onAppAction({ kind: 'query-outlets' });
+      opts.onAppAction({ kind: 'toggle-app', app: 'query' });
     }
   }
 
