@@ -154,31 +154,17 @@ const CSS = `
   color: #ff5a5a;
 }
 
-/* low-battery banner */
-.phone-lowbatt-banner {
-  position: absolute;
-  top: 24px; left: 0; right: 0;
-  margin: 0 auto;
-  padding: 4px 10px;
-  max-width: 88%;
-  text-align: center;
-  background: linear-gradient(180deg,#ff4d4d,#c92828);
-  color: #fff;
-  font: bold 10px sans-serif;
-  letter-spacing: .06em;
-  border-radius: 0 0 8px 8px;
-  transform: translateY(-110%);
-  transition: transform .35s cubic-bezier(.22,1,.36,1);
-  pointer-events: none;
-  box-shadow: 0 4px 14px rgba(255,77,77,0.4);
-  z-index: 9;
-}
+.phone-lowbatt-banner { position: absolute; top: 24px; left: 0; right: 0; height: 4px; background: linear-gradient(180deg,#ff4d4d,#c92828); border-radius: 0 0 8px 8px; transform: translateY(-110%); transition: transform .35s cubic-bezier(.22,1,.36,1); pointer-events: none; box-shadow: 0 4px 14px rgba(255,77,77,0.4); z-index: 9; }
 .phone-lowbatt-banner.show { transform: translateY(0); }
 .phone-lowbatt-banner.blink { animation: lb-blink 0.7s steps(2,end) infinite; }
 @keyframes lb-blink {
   0%, 49%   { opacity: 1; }
   50%, 100% { opacity: 0.35; }
 }
+
+.phone-pip-bar { position: absolute; left: 12px; top: 28px; width: 60px; height: 4px; background: rgba(255,255,255,0.18); border-radius: 2px; overflow: hidden; z-index: 10; pointer-events: none; }
+.phone-pip-bar-fill { height: 100%; background: linear-gradient(90deg,#ffb14d,#ff8800); transform-origin: left; transition: transform .1s linear; }
+.phone-pip-bar-fill.low { background: linear-gradient(90deg,#ff4d4d,#c92828); }
 
 /* app area */
 .phone-app-area {
@@ -273,11 +259,6 @@ const CSS = `
   to   { stroke-dashoffset: 0; }
 }
 .phone-app-icon.ready .install-ring { display: none; }
-.phone-app-icon.ready { animation: ready-pulse 1.6s ease-in-out infinite; }
-@keyframes ready-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(45,255,122,0.55); }
-  50%      { box-shadow: 0 0 0 9px rgba(45,255,122,0); }
-}
 .phone-app-icon.ready .phone-app-state-tag { animation: fade-state-in .45s ease-out forwards; }
 @keyframes fade-state-in { from { opacity: 0; } to { opacity: 1; } }
 .phone-app-icon.pending .install-active { stroke-dashoffset: 163.42; }
@@ -324,6 +305,12 @@ const CSS = `
   vertical-align: middle;
 }
 .phone-query-legend .sep { color: rgba(255,255,255,0.4); margin: 0 2px; }
+
+.phone-game-over, .phone-game-win { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px 20px; text-align: center; color: #fff; background: rgba(0,0,0,0.85); z-index: 62; }
+.phone-game-over.hidden, .phone-game-win.hidden { display: none; }
+.phone-game-title { font: bold 22px sans-serif; color: #fff; }
+.phone-game-subtitle { font: 13px sans-serif; color: rgba(255,255,255,0.7); }
+.phone-restart-btn { margin-top: 6px; background: #2dff7a; color: #000; padding: 8px 24px; border: 0; border-radius: 8px; cursor: pointer; font: bold 14px sans-serif; pointer-events: auto; }
 `;
 
 function injectStylesOnce(): void {
@@ -519,7 +506,8 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       </span>
     </span>
   </div>
-  <div class="phone-lowbatt-banner">⚠ 电量严重不足</div>
+  <div class="phone-lowbatt-banner"></div>
+  <span class="phone-pip-bar"><span class="phone-pip-bar-fill"></span></span>
   <div class="phone-app-area">
     <div class="phone-home active">
       <div class="phone-app-grid"></div>
@@ -535,6 +523,8 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
     </div>
   </div>
+  <div class="phone-game-over hidden"><div class="phone-game-title">没电了</div><div class="phone-game-subtitle">手机黑屏,你被困在图书馆</div><button class="phone-restart-btn">再来一局</button></div>
+  <div class="phone-game-win hidden"><div class="phone-game-title">充上电了!</div><div class="phone-game-subtitle">你活了下来</div><button class="phone-restart-btn">再来一局</button></div>
 </div>`;
 
   root.appendChild(chassis);
@@ -546,12 +536,24 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   const battTimeEl = chassis.querySelector<HTMLElement>('.phone-battery-time')!;
   const battPctEl  = chassis.querySelector<HTMLElement>('.phone-battery-pct')!;
   const bannerEl   = chassis.querySelector<HTMLElement>('.phone-lowbatt-banner')!;
+  // PR #12 §2.6.4 能量条 fill 与 §2.6.5 胜负弹窗
+  const pipBarFillEl = chassis.querySelector<HTMLElement>('.phone-pip-bar-fill')!;
+  const gameOverEl   = chassis.querySelector<HTMLElement>('.phone-game-over')!;
+  const gameWinEl    = chassis.querySelector<HTMLElement>('.phone-game-win')!;
+  const restartOverBtn = chassis.querySelector<HTMLElement>('.phone-game-over .phone-restart-btn')!;
+  const restartWinBtn  = chassis.querySelector<HTMLElement>('.phone-game-win .phone-restart-btn')!;
   const homeEl     = chassis.querySelector<HTMLElement>('.phone-home')!;
   const mapEl     = chassis.querySelector<HTMLElement>('.phone-app-view.map')!;
   const radarEl   = chassis.querySelector<HTMLElement>('.phone-app-view.radar')!;
   const queryEl    = chassis.querySelector<HTMLElement>('.phone-app-view.query')!;
   const gridEl     = chassis.querySelector<HTMLElement>('.phone-app-grid')!;
   const queryLegendEl = chassis.querySelector<HTMLElement>('.phone-query-legend')!;
+
+  // PR #12 §2.6.5 restart 按钮 click → opts.onAppAction({ kind: 'restart' })
+  // 高于 .phone-hud-root 的 pointer-events:none(通过 .phone-restart-btn
+  // 的 pointer-events:auto 子元素打开)以接收点击
+  restartOverBtn.addEventListener('click', () => opts.onAppAction({ kind: 'restart' }));
+  restartWinBtn.addEventListener('click', () => opts.onAppAction({ kind: 'restart' }));
 
   const mapCanvas    = mapEl .querySelector<HTMLCanvasElement>('canvas')!;
   const radarCanvas  = radarEl.querySelector<HTMLCanvasElement>('canvas')!;
@@ -648,26 +650,20 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     queryEl.classList.toggle('active', a === 'query');
   }
 
-  function toggleApp(target: AppId): void {
+  // PR #12 §2.6.1 toggleApp 改 exclusive emit 顺序(切回家 emit 旧,切到新先 emit 旧关再 emit 新开)
+  // 全部用 { kind: 'toggle-app', app: 'map'|'radar'|'query' },消除 §16-S1 RADAR 缺位。
+  // 入参收窄到真 app(toggleApp 永远不接受 'home' — home 只通过 setActiveApp 内部切换)
+  function toggleApp(target: 'map' | 'radar' | 'query'): void {
     if (target === activeApp) {
       setActiveApp('home');
+      // 切回家,emit 旧 app 关闭(home 本身不 emit)
+      opts.onAppAction({ kind: 'toggle-app', app: target });
       return;
     }
+    // 切到新:先 emit 旧关(home 不需要 emit),再切 active + emit 新开
+    if (activeApp !== 'home') opts.onAppAction({ kind: 'toggle-app', app: activeApp });
     setActiveApp(target);
-    // onAppAction emit per §10.2:
-    //   map    → toggle-app map
-    //   query  → toggle-app query
-    //   radar  → ⚠ §16-S1: AppAction union now supports 'radar' (PR #12 §2.1);
-    //            exclusive-emit wiring lands in commit 7 — internal app state
-    //            still flips correctly in the interim.
-    //   home   → never passed here (handled by early-return above when target
-    //            matches the active app); no close action either since master
-    //            §7.3 reserves 'close' for a future total-HUD teardown path.
-    if (target === 'map') {
-      opts.onAppAction({ kind: 'toggle-app', app: 'map' });
-    } else if (target === 'query') {
-      opts.onAppAction({ kind: 'toggle-app', app: 'query' });
-    }
+    opts.onAppAction({ kind: 'toggle-app', app: target });
   }
 
   // ── keyboard ─────────────────────────────────────────────────────────────
@@ -725,6 +721,17 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     qEmptyEl.textContent = String(emptyN);
     qOccEl.textContent = String(occN);
     qYouEl.textContent = '0'; // player-occupied stub; PR #11 wires to real status
+
+    // PR #12 §2.6.4 能量条 fill — state.pips 是 0~1 连续 energy(原 0~3 语义已改)
+    const energy = Math.max(0, Math.min(1, state.pips));
+    pipBarFillEl.style.transform = `scaleX(${energy})`;
+    pipBarFillEl.classList.toggle('low', energy < 0.2);
+
+    // PR #12 §2.6.5 胜负弹窗 toggle(hidden)-没电(state.won=false && battery<=0)→显 game over,
+    // 胜利(state.won=true)→显 win。state.won / battery 都由 getSharedState()[commit 5]
+    // 提供(main.ts wrap 加 won: gameWon)。
+    gameOverEl.classList.toggle('hidden', !(!state.won && state.battery <= 0));
+    gameWinEl.classList.toggle('hidden', !state.won);
 
     // app-specific paint
     if (activeApp === 'map') {
