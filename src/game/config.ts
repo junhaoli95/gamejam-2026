@@ -36,6 +36,6 @@ export const CONFIG = {
     },
   },
   npc: {
-    count: 3,
+    count: 5,
   },
 } as const;

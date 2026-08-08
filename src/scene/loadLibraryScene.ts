@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadGlbNormalized } from '../../snippets/loadGlb';
+import { CONFIG } from '../game/config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Library scene (拟真版 v6 — 每张桌各自逆时针旋转 90°;debug overlay 可调)
@@ -209,12 +210,16 @@ export interface LibraryScene {
   /** 静态+桌区合并碰撞体(玩家与相机共用)。rebuild 时原地刷新,引用稳定。 */
   colliders: THREE.Box3[];
   /** 所有电位位置(柱电位+端板盒+桌电位+壁插),供 SharedState/minimap 消费。 */
-  outlets: Array<{ x: number; z: number }>;
+  outlets: Array<{ x: number; z: number; occupied: boolean }>;
   update: (dt: number) => void;
   /** Debug overlay 用:按新 params 拆除并重建桌区(桌椅猫+电位+collider+helper)。 */
   rebuildTableZone: (params: DebugParams) => void;
   /** Debug overlay 用:显示/隐藏全部 collider 的线框。 */
   setColliderHelpersVisible: (visible: boolean) => void;
+  /** PR #12 §2.5/§2.5.4 randomize NPC 占位 — 重置全部 occupied,seeded RNG 选 count 个标红,刷新 mesh 颜色 + NPC 占位球。 */
+  randomizeOccupiedOutlets: (count?: number, seed?: number) => void;
+  /** PR #12 §2.7 单桩切 occupied 状态 + 同步 mesh material 红绿(扩展点,本 PR 仅内部用)。 */
+  setOutletOccupied: (index: number, occupied: boolean) => void;
 }
 
 /** 占位椅:座面 + 靠背(靠背在远离桌子一侧,axis=椅子朝向所在轴)。 */
@@ -461,21 +466,35 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     }
   }
 
-  // 电位绿标记共享一份呼吸材质("发光 = 可充电"统一脉冲)
-  const outletMat = new THREE.MeshStandardMaterial({
+  // PR #12 §2.7 电位材质:空=绿/占=红,被 NPC 占位时切换 mesh.material
+  const outletMatEmpty = new THREE.MeshStandardMaterial({
     color: 0x0a3318,
     emissive: 0x2dff7a,
     emissiveIntensity: 1.2,
     roughness: 0.4,
     metalness: 0,
   });
+  const outletMatOccupied = new THREE.MeshStandardMaterial({
+    color: 0x33100a,
+    emissive: 0xff4d4d,
+    emissiveIntensity: 1.2,
+    roughness: 0.4,
+    metalness: 0,
+  });
+
+  // 每个桩对应一个 mesh(柱电位 + 端板绿点 + 桌电位);壁插无 mesh 视图(常亮)
+  // 与 outletPositions 同序;壁插槽位为 undefined 表示"无切换 mesh"。
+  const outletMeshes: (THREE.Mesh | undefined)[] = [];
+  const columnOutletMeshes: THREE.Mesh[] = [];
+  const endDotMeshes: THREE.Mesh[] = [];
 
   // 柱电位:绿方块在柱 ±x 面低位,立刻可见
   const columnOutletGeo = new THREE.BoxGeometry(0.02, 0.25, 0.25);
   for (const c of poweredColumns) {
-    const m = new THREE.Mesh(columnOutletGeo, outletMat);
+    const m = new THREE.Mesh(columnOutletGeo, outletMatEmpty);
     m.position.set(c.x + c.face * (MODEL_DIMS.column.w / 2 + 0.01), COLUMN_OUTLET_Y, c.z);
     scene.add(m);
+    columnOutletMeshes.push(m);
   }
 
   // 端板电位盒:银灰盒 + 绿点,立刻可见
@@ -487,10 +506,17 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     const boxMesh = new THREE.Mesh(endBoxGeo, endBoxMat);
     boxMesh.position.set(b.x, 1.2, northFaceZ - 0.02);
     scene.add(boxMesh);
-    const dot = new THREE.Mesh(endDotGeo, outletMat);
+    const dot = new THREE.Mesh(endDotGeo, outletMatEmpty);
     dot.position.set(b.x, 1.2, northFaceZ - 0.06);
     scene.add(dot);
+    endDotMeshes.push(dot);
   }
+
+  // PR #12 §2.5.4 NPC 占位球 — 橙色 sphere(0.35 半径),放在选中桩的 (x, 0.4, z+0.6)
+  const npcMat = new THREE.MeshStandardMaterial({ color: 0xff6b3a, roughness: 0.7, metalness: 0 });
+  const npcGeo = new THREE.SphereGeometry(0.35, 12, 8);
+  const npcMeshes: THREE.Mesh[] = [];
+  const NPC_SEED = 1;
 
   // ── 窗边 readingTable 座位:静态(2 人桌,西侧椅)──
   const SEAT_OFFSETS = [-0.45, 0.45];
@@ -562,7 +588,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   let freeSeats: Set<string> = computeFreeSeats(params.freeSeatCount, params.freeSeed);
   let currentParams: DebugParams = params;
   let furIdx = 0;
-  const outletPositions: Array<{ x: number; z: number }> = [];
+  const outletPositions: Array<{ x: number; z: number; occupied: boolean }> = [];
 
   function buildOneStudyTable(p: Placement, rows: number[]): void {
     const dim = MODEL_DIMS.studyTable;
@@ -600,9 +626,13 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     // 桌面中线 2 电位
     const tableH = dim.h;
     for (const ox of STUDY_OUTLET_OFFSETS) {
-      const sq = new THREE.Mesh(studyOutletGeo, outletMat);
+      const sq = new THREE.Mesh(studyOutletGeo, outletMatEmpty);
       sq.position.set(p.x + ox, tableH + 0.011, p.z);
       tableZone.add(sq);
+      // 与 outletPositions 同序:本循环是 buildOneStudyTable 一对一,
+      // 同时 push mesh + pos;同 rebuildTableZone 对齐(rebuild 后 column/endWall 先推)
+      outletPositions.push({ x: p.x + ox, z: p.z, occupied: false });
+      outletMeshes.push(sq);
     }
 
     // 4 椅 + 4 座位猫
@@ -663,22 +693,27 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     colliders.length = 0;
     colliders.push(...staticColliders, ...tableColliders);
 
-    // 重算 outlets(原地刷新,facade 持同一引用)
+    // 重算 outlets(原地刷新,facade 持同一引用)+ 同步 outletMeshes
     outletPositions.length = 0;
+    outletMeshes.length = 0;
+    let ciMesh = 0;
     for (const c of poweredColumns) {
-      outletPositions.push({ x: c.x + c.face * (MODEL_DIMS.column.w / 2), z: c.z });
+      outletPositions.push({ x: c.x + c.face * (MODEL_DIMS.column.w / 2), z: c.z, occupied: false });
+      outletMeshes.push(columnOutletMeshes[ciMesh++]);
     }
+    let eiMesh = 0;
     for (const b of endPanelBoxes) {
-      outletPositions.push({ x: b.x, z: b.z - MODEL_DIMS.column.d / 2 });
+      outletPositions.push({ x: b.x, z: b.z - MODEL_DIMS.column.d / 2, occupied: false });
+      outletMeshes.push(endDotMeshes[eiMesh++]);
     }
     for (const p of staticPlacements) {
-      if (p.kind === 'wallSocket') outletPositions.push({ x: p.x, z: p.z });
-    }
-    for (const tp of tablePlacements) {
-      for (const ox of STUDY_OUTLET_OFFSETS) {
-        outletPositions.push({ x: tp.x + ox, z: tp.z });
+      if (p.kind === 'wallSocket') {
+        outletPositions.push({ x: p.x, z: p.z, occupied: false });
+        // 壁插常亮(spec §6.2):无切换 mesh 视图
+        outletMeshes.push(undefined);
       }
     }
+    // study table sq meshes 由 buildOneStudyTable 内 push(保持与 outletPositions 同序)
 
     console.log(`[debug] rebuild table zone: rowSpacing=${p.rowSpacing}, seatSideDist=${p.seatSideDist}, tables=${tablePlacements.length}, outlets=${outletPositions.length}`);
   }
@@ -718,6 +753,59 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     for (const h of tableHelpers) h.visible = visible;
   }
 
+  /** PR #12 §2.7 单桩切 occupied + 同步 mesh material。 */
+  function setOutletOccupied(index: number, occupied: boolean): void {
+    if (index < 0 || index >= outletPositions.length) return;
+    outletPositions[index].occupied = occupied;
+    const mesh = outletMeshes[index];
+    if (mesh) mesh.material = occupied ? outletMatOccupied : outletMatEmpty;
+  }
+
+  /**
+   * PR #12 §2.5/§2.5.4 seeded RNG NPC 占位。
+   * 重置全部 outlets.occupied=false + 回绿;用 mulberry32 + Fisher-Yates
+   * 从 mesh-backed 桩全集里挑 count 个标红(occupied=true);清旧 NPC 占位球,建新橙色球
+   * 放在 (o.x, 0.4, o.z + 0.6)。壁插(无切换 mesh)排除在外 — 与 freeSeat 同源 RNG。
+   */
+  function randomizeOccupiedOutlets(count: number = CONFIG.npc.count, seed: number = NPC_SEED): void {
+    // 重置 occupied + 回绿 + 清旧 NPC 球
+    for (let i = 0; i < outletPositions.length; i++) {
+      outletPositions[i].occupied = false;
+      const mesh = outletMeshes[i];
+      if (mesh) mesh.material = outletMatEmpty;
+    }
+    npcMeshes.forEach(m => scene.remove(m));
+    npcMeshes.length = 0;
+
+    // 仅 mesh-backed 桩可被 NPC 占位(排除壁插)
+    const meshBacked: number[] = [];
+    for (let i = 0; i < outletMeshes.length; i++) {
+      if (outletMeshes[i]) meshBacked.push(i);
+    }
+    if (meshBacked.length === 0) return;
+
+    // Fisher-Yates 洗牌取前 count 个 — 同 (count, seed) 永远产同一份分布
+    const rng = mulberry32(seed);
+    for (let i = meshBacked.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [meshBacked[i], meshBacked[j]] = [meshBacked[j], meshBacked[i]];
+    }
+    const chosenN = Math.min(count, meshBacked.length);
+    for (let k = 0; k < chosenN; k++) {
+      const idx = meshBacked[k];
+      outletPositions[idx].occupied = true;
+      const mesh = outletMeshes[idx];
+      if (mesh) mesh.material = outletMatOccupied;
+      const o = outletPositions[idx];
+      const npc = new THREE.Mesh(npcGeo, npcMat);
+      npc.position.set(o.x, 0.4, o.z + 0.6); // 桩旁偏前
+      scene.add(npc);
+      npcMeshes.push(npc);
+    }
+  }
+  // 启动调用一次,确保每局可复现
+  randomizeOccupiedOutlets();
+
   let t = 0;
 
   return {
@@ -726,11 +814,15 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     colliders,
     outlets: outletPositions,
     update: (dt: number) => {
-      // 电位呼吸脉冲 —— "发光 = 可充电"的视觉语言
+      // 电位呼吸脉冲 —— "发光 = 可充电"的视觉语言(空绿 / 占红 同步脉冲)
       t += dt;
-      outletMat.emissiveIntensity = 1.1 + 0.6 * Math.sin(t * 3.2);
+      const pulse = 1.1 + 0.6 * Math.sin(t * 3.2);
+      outletMatEmpty.emissiveIntensity = pulse;
+      outletMatOccupied.emissiveIntensity = pulse;
     },
     rebuildTableZone,
     setColliderHelpersVisible,
+    randomizeOccupiedOutlets,
+    setOutletOccupied,
   };
 }
