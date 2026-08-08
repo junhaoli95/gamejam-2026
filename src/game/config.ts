@@ -5,6 +5,7 @@ export const CONFIG = {
     sprintSpeed: 5.6,
     radius: 0.32,
     turnLerp: 14,
+    turnRate: 3.0,
   },
   camera: {
     fov: 70,
@@ -22,10 +23,10 @@ export const CONFIG = {
     minDist: 1.4,
   },
   dash: {
-    startPips: 3,
-    dashDurationS: 0.4,
+    startEnergy: 1.0,
+    drainPerSec: 0.4,
+    regenPerSec: 0,
     dashMult: 3,
-    cooldownS: 0.5,
   },
   battery: {
     startPercent: 1.0,

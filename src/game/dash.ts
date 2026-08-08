@@ -1,70 +1,52 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Dash pip 能量系统(master spec §4.2)
+// Dash 连续能量条系统(PR #12 spec §2.2)
 //
-// 状态机: idle → (requestDash: phase==idle & pips≥1 & 方向非零) → dashing(0.4s ×3速)
-//         → cooldown(0.5s) → idle
-// pip 单局不补(resetDash 仅在新局调);shift 边沿触发(requestDash 而非 level-trigger)。
-// 方向门控(§4.2 防误操作):fwd 与 strafe 全零时不触发,保护 pip 不被无故消耗。
+// 状态机: Shift 按住 + 有方向 + energy>0 → 持续消耗,松开 / 无方向 / 无能量 停。
+// 连续 0~1 energy,无 cooldown / 无 phase 状态机;按时间消耗(drainPerSec * dt)。
+// regenPerSec = 0 → 单局不补(spec §4.2 忠于原 pip 单局不补语义)。
+// 方向门控(fwd/strafe 全零时)不消耗,保护 energy 不被无故消耗。
 //
-// 本模块不含 Three/DOM 依赖(rule 1),不读 config.ts;DashConfig 由 playerStats.ts 传入。
+// 平台约束:无 three/DOM/window 依赖,纯纯函数 + 可变 state 进出;DashConfig 由
+// playerStats.ts 传入(从 CONFIG.dash)。
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type DashPhase = 'idle' | 'dashing' | 'cooldown';
-
 export interface DashConfig {
-  startPips: number;       // 3
-  dashDurationS: number;   // 0.4
-  dashMult: number;         // 3
-  cooldownS: number;        // 0.5
+  startEnergy: number;      // 1.0(满)
+  drainPerSec: number;      // 0.4(PR #12 spec §2.3,约 2.5 秒纯冲刺用完)
+  regenPerSec: number;      // 0 单局不补
+  dashMult: number;          // 3
 }
 
 export interface DashState {
-  pips: number;            // 0~3
-  phase: DashPhase;
-  phaseTimer: number;      // 当前 phase 剩余秒
+  energy: number;            // 0~1 连续
+  isDashing: boolean;        // 当帧是否在冲刺(Shift 持续 + 有能量 + 有方向)
 }
 
-export interface DirectionInput {
-  fwd: number;     // W=+1, S=-1, 0 = 未按
-  strafe: number;  // D=+1, A=-1, 0 = 未按
-}
-
-/** 当前速度倍率,供 controller 读; dashing 时 = cfg.dashMult, 其余 1 */
-export function getDashSpeedMult(state: DashState, cfg: DashConfig): number {
-  return state.phase === 'dashing' ? cfg.dashMult : 1;
+/** 每帧调。shiftDown = 用户按住 Shift。返回当前速度倍率(以配置看:冲刺 dashMult / 否则 1)。 */
+export function updateDash(
+  state: DashState,
+  cfg: DashConfig,
+  shiftDown: boolean,
+  hasDirection: boolean,
+  dt: number,
+): number {
+  if (shiftDown && hasDirection && state.energy > 0) {
+    state.isDashing = true;
+    state.energy = Math.max(0, state.energy - cfg.drainPerSec * dt);
+    return cfg.dashMult;
+  }
+  state.isDashing = false;
+  if (cfg.regenPerSec > 0) {
+    state.energy = Math.min(cfg.startEnergy, state.energy + cfg.regenPerSec * dt);
+  }
+  return 1;
 }
 
 export function createDash(cfg: DashConfig): DashState {
-  return { pips: cfg.startPips, phase: 'idle', phaseTimer: 0 };
-}
-
-/** 请求 dash; 返回是否真触发(消费 1 pip, 进入 dashing)。三道门: phase / pip / 方向非零 */
-export function requestDash(state: DashState, cfg: DashConfig, input: DirectionInput): boolean {
-  if (state.phase !== 'idle') return false;
-  if (state.pips < 1) return false;
-  if (input.fwd === 0 && input.strafe === 0) return false;
-  state.pips -= 1;
-  state.phase = 'dashing';
-  state.phaseTimer = cfg.dashDurationS;
-  return true;
-}
-
-/** 每帧调用,推进 phaseTimer / 自动转 phase */
-export function updateDash(state: DashState, cfg: DashConfig, dt: number): void {
-  if (state.phase === 'idle') return;
-  state.phaseTimer -= dt;
-  if (state.phaseTimer > 0) return;
-  if (state.phase === 'dashing') {
-    state.phase = 'cooldown';
-    state.phaseTimer = cfg.cooldownS;
-  } else {
-    state.phase = 'idle';
-    state.phaseTimer = 0;
-  }
+  return { energy: cfg.startEnergy, isDashing: false };
 }
 
 export function resetDash(state: DashState, cfg: DashConfig): void {
-  state.pips = cfg.startPips;
-  state.phase = 'idle';
-  state.phaseTimer = 0;
+  state.energy = cfg.startEnergy;
+  state.isDashing = false;
 }
