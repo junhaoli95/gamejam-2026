@@ -8,11 +8,12 @@ export interface SharedState {
   outlets: Array<{ x: number; z: number; occupied: boolean }>;
   npcs: Array<{ x: number; z: number; state: string }>;
   path?: Array<{ x: number; z: number }>;
+  won?: boolean;
 }
 
 export type AppAction =
-  | { kind: 'query-outlets' }
-  | { kind: 'toggle-map' }
+  | { kind: 'toggle-app'; app: 'map' | 'radar' | 'query' }
+  | { kind: 'restart' }
   | { kind: 'close' };
 
 export interface SharedStateFacade {
@@ -22,7 +23,7 @@ export interface SharedStateFacade {
 export function createSharedStateFacade(
   player: THREE.Group,
   controller: ThirdPersonController,
-  outlets: Array<{ x: number; z: number }>,
+  outlets: Array<{ x: number; z: number; occupied?: boolean }>,
 ): SharedStateFacade {
   return {
     getSharedState: () => ({
@@ -33,7 +34,7 @@ export function createSharedStateFacade(
       },
       battery: 1.0,
       pips: 3,
-      outlets: outlets.map(o => ({ ...o, occupied: false })),
+      outlets: outlets.map(o => ({ x: o.x, z: o.z, occupied: o.occupied ?? false })),
       npcs: [],
       path: undefined,
     }),
