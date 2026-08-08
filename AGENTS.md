@@ -71,12 +71,21 @@ interface OpponentController {
 8. 守住 scoped 边界：单场景图书馆、玩家+2~3 NPC、3 app、3 pip。多场景/多 app/升级树/roguelike 树 全部是 stretch，D11+ 时间够才碰。（2026-08-04 解锁：2 app → 3 app，加 RADAR app 补全信息梯度，详见 `spec/MASTER-SPEC.md` §3）
 9. **调试资源闭环**：MCP 验证完成后**关闭游戏标签页**（`chrome-devtools_close_page`）即可；不要杀 MCP chrome 进程或 dev server —— 渲染中的标签页才是高能耗（10w→40w），闲置进程/空白页可忽略。开发者可能随时接手试玩，dev server 默认保持运行
 10. **场景尺度目标（backlog）**：实地图书馆一层约为当前场景（32×24m）的 10+ 倍面积，目标场景尺度向实地看齐。当前 32×24 为占位阶段尺度，后续统一调整（影响布局密度、NPC 寻路、相机/雾效范围，属大改，单独 PR）
-11. **并行独立 agent 工作流（地基后启用）**：
+11. **并行独立 agent 工作流（地基后启用）**:
     - 主 agent 完成 Layer 1（config + SharedState interface + mount points）后才可并行
     - 用户在两个独立 opencode 会话里各自开 worktree：`git worktree add ../gamejam-2026-<branch> feat/<x>` 隔离工作目录（两 worktree 共享同一 .git，各自 checkout 各自分支，互不干扰）
     - 文件边界：UI 独立 agent 只改 `src/ui/` + 替换 `src/ui/phoneHud.ts` 的 mountPhoneHud 实现；Game 独立 agent 只改 `src/game/` + `src/player/` + 替换 `src/game/playerStats.ts` 的 mountPlayerStats 实现；两独立 agent 都不改 `src/main.ts` 的调用点（Layer 1 钉死）
     - 共享接口 = Layer 1 钉死的 TS interface，独立 agent 只 implements 不 invent
     - 两 PR 都开 → 主 agent（本会话）review → 用户 merge 先开的 → 后开的 rebase 到新 main
+12. **subagent dispatch 策略（主 agent 用 task 工具派子任务时遵守）**:
+    - **何时用 subagent**:短任务（≤15 分钟估时）+ 文件边界清晰 + 不需用户监工
+    - **何时不用 subagent**:长任务（>20 分钟）→ 改用户新开 opencode session + worktree 模式（用户可实时看 stdout、随时 Ctrl+C、可补充指令）;协调 PR（多文件互相依赖）→ 主 agent 亲自做最快
+    - **prompt 内必须含 build 验证策略**:明确写"每 N commit 合跑一次 build，test 只在最后一次完整跑"，避免 subagent 每 commit 各跑一次 build+test 烧 token
+    - **prompt 内必须含预算上限**:"如果连续 build 失败 3 次或 test 失败 3 次，立刻停下，返回错误原因给我，不要陷入循环重试"
+    - **subagent 是黑盒**:主 agent 看不到中间过程、不能实时停、失败后没 checkpoint 续传;只能等它返回最终消息;高风险任务必须拆小 + 给任务前 dry-run 才用 subagent
+    - **并行多 subagent 判据**:任务间文件交集 = 0 才并行;> 0 必须串行（否则 git merge 冲突打架）
+    - **多模态验证**:主 agent 不能读图片时,可 dispatch 多模态 subagent（如 Claude / GPT-4V）做 UI 截图 review。日常 DOM 验证优先用 `chrome-devtools_evaluate_script` 读 class/style/textContent 替代截图，多数 review 不需图片
+    - **session 复用优先**:一个功能彻底开发完再删 worktree，避免来回重建 + git config 身份重配;`git worktree remove` 是轻量操作（共享 .git 无需重下载）但 opencode session 会随之失效（上下文丢失）
 
 ## AI 协作偏好
 
