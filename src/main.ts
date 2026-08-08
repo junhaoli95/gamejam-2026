@@ -22,12 +22,12 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // --- Scene ---
-const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible } =
+const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // --- 点击进入指针锁的提示遮罩 ---
 const overlay = document.createElement('div');
-overlay.textContent = '点击画面进入 · WASD 移动 · Shift 加速 · 鼠标转视角 · Esc 退出';
+overlay.textContent = 'WASD 移动(AD 转向)· Shift 冲刺 · 1/2/3 切 app · E 插枪';
 Object.assign(overlay.style, {
   position: 'fixed',
   inset: '0',
@@ -42,6 +42,17 @@ Object.assign(overlay.style, {
   zIndex: '10',
 });
 document.body.appendChild(overlay);
+
+// PR #12 §2.5.2:点击 overlay 直接开始(无 pointer lock);commit 5 加 gameStarted 标志主循环门控
+let gameStarted = false;
+overlay.addEventListener('click', () => {
+  overlay.style.display = 'none';
+  gameStarted = true;
+});
+
+// PR #12 §2.5.2/§2.5.5:胜利 / 失败状态(共态,影响 main loop 早退 + getSharedState wrap)
+let gameWon = false;      // 走近空桩按 E → true
+let gameOver = false;     // battery=0 → true
 
 // --- Runtime + PlayerStats(PR #10 — 必须先于 controller 实例化,因 controller 需读 dash mult)
 const runtime = {
@@ -67,16 +78,40 @@ const controller = createThirdPersonController({
 // PR #10 在 main 包一层 wrap,用 runtime 真值覆盖 battery/pips 字段(sharedState.ts 文件 0 改,§0.3)。
 const { getSharedState: getRawSharedState } = createSharedStateFacade(player, controller, outlets);
 
-/** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值(给 phone HUD / minimap / __debug 读)。 */
+/** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 加 won:gameWon(给 phone HUD / minimap / __debug 读)。 */
 function getSharedState() {
   const s = getRawSharedState();
-  return { ...s, battery: runtime.battery, pips: runtime.pips };
+  return { ...s, battery: runtime.battery, pips: runtime.pips, won: gameWon };
 }
 
 // --- Mount phone HUD stub(Sam 在 PR #9 替换 mountPhoneHud 实现,调用点不动)---
 mountPhoneHud({
   getSharedState,
-  onAppAction: (action) => console.log('[stub] app action:', action),
+  onAppAction: (action) => {
+    if (action.kind === 'toggle-app') {
+      const key = action.app === 'map' ? 'MAP' : action.app === 'radar' ? 'RADAR' : 'QUERY';
+      runtime.appOpen[key] = !runtime.appOpen[key];
+    } else if (action.kind === 'restart') {
+      gameWon = false;
+      gameOver = false;
+      playerStats.reset();
+      player.position.set(0, 0, 8.5);
+      randomizeOccupiedOutlets();
+    }
+  },
+});
+
+// PR #12 §2.5.2:E 键近空桩(≤1.5m)判胜
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyE' || gameWon || gameOver || !gameStarted) return;
+  const s = getSharedState();
+  const near = s.outlets.find(o =>
+    !o.occupied && Math.hypot(o.x - s.player.x, o.z - s.player.z) < 1.5,
+  );
+  if (near) {
+    gameWon = true;
+    console.log('[win] 充上电了');
+  }
 });
 
 // --- Debug: expose getSharedState to window for console eval ---
@@ -111,10 +146,17 @@ function animate() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
 
-  // PR #12:step 改签 (dt, input);Shift 持续消耗 energy(不再边沿触发)。
-  const input = controller.getInput();
-  playerStats.step(dt, input);
-  controller.update(dt);
+  // PR #12 §2.5.5:未点击 overlay / 已胜利 / 已没电时锁 1/2/3/E/Shift(WASD) —
+  // 直接跳过 step + controller.update 即冻结玩家状态,场景呼吸脉冲 + phone HUD RAF 仍在跑。
+  if (gameStarted && !gameWon && !gameOver) {
+    // PR #12:每帧 const input = controller.getInput(); playerStats.step(dt, input);
+    // Shift 持续消耗 energy(不再边沿触发 requestDash)。
+    const input = controller.getInput();
+    playerStats.step(dt, input);
+    controller.update(dt);
+    // §2.5.5 game over 检测:battery=0 且未胜 → gameOver=true
+    if (runtime.battery <= 0) gameOver = true;
+  }
   update(dt);
   renderer.render(scene, camera);
 }

@@ -36,17 +36,12 @@ interface ControllerOptions {
 const FIXED_PITCH = 0.16;
 
 export function createThirdPersonController(opts: ControllerOptions): ThirdPersonController {
-  const { camera, dom: _dom, player, colliders, bounds, overlay, getDashMult } = opts;
-  void _dom; // dom 仅用于历史 pointer lock;视角 D 不再使用,保留接口不破外部调用点
+  const { camera, dom: _dom, player, colliders, bounds, overlay: _overlay, getDashMult } = opts;
+  void _dom;  // dom 仅用于历史 pointer lock;视角 D 不再使用,保留接口不破外部调用点
+  void _overlay; // commit 5 把 overlay click → 隐藏 + gameStarted flag 移到 main.ts(整合 commit)
 
   let yaw = 0;           // 0 = 相机在角色 +z 后方,看向 -z(书库深处)
   const keys = new Set<string>();
-
-  // 视角 D:点击 overlay 直接开始(无 pointer lock,无鼠标依赖)
-  // commit 5 在此基础上加 gameStarted flag 与胜负早退门;此 commit 只保证可点击进入。
-  overlay.addEventListener('click', () => {
-    overlay.style.display = 'none';
-  });
 
   window.addEventListener('keydown', (e: KeyboardEvent) => keys.add(e.code));
   window.addEventListener('keyup', (e: KeyboardEvent) => keys.delete(e.code));
