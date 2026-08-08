@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { CONFIG } from '../game/config';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Third-person controller (placeholder scaffold)
+// Third-person controller — 视角方案 D(PR #12 spec §2.8)
 //
-// "第一人称视野 + 第三人称显示角色":指针锁鼠标视角,相机紧跟角色肩后
-// (略偏右,角色露在画面左下),WASD 相对相机朝向移动,Shift 加速占位
-// (dash pip 经济系统后进 game/)。
-//
+// 坦克式控制:W/S 沿角色朝向前后移动;A/D 直接控制 yaw 转向(无平移);
+// 无指针锁 / 无鼠标:移动端友好,6 键操作 → 5 键(A/D 还兼任转向)。
+// 相机:沿用 PR #8 的越肩 spring-damp + AABB 防穿 + minDist clamp(PR #11
+// 视角 yaw 改由按键驱动而非鼠标)。
 // 碰撞:玩家=半径 RADIUS 的圆柱,对场景静态 AABB 做分轴 move-and-clamp;
 // 相机从头部向期望机位步进采样,撞到 AABB 前停下(防穿书架)。
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,9 +15,9 @@ import { CONFIG } from '../game/config';
 export interface ThirdPersonController {
   update: (dt: number) => void;
   getYaw: () => number;
-  /** 读取这一帧的方向/Shift 状态(ShiftEdge 为边沿触发,本帧内只可读一次,会消费 prev shift 标记)。
-   *  供主循环把 shiftEdge 喂给 playerStats.requestDash 把方向喂给 playerStats.step。 */
-  getInput: () => { fwd: number; strafe: number; shift: boolean; shiftEdge: boolean };
+  /** 读取这一帧的方向/Shift 状态(Shift 为持续按住,供 playerStats.step 调 updateDash)。
+   *  供主循环 const input = controller.getInput(); playerStats.step(dt, input); */
+  getInput: () => { fwd: number; strafe: number; shift: boolean };
 }
 
 interface ControllerOptions {
@@ -26,36 +26,28 @@ interface ControllerOptions {
   player: THREE.Group;
   colliders: THREE.Box3[];
   bounds: { w: number; d: number };
-  /** 指针未锁定时显示的提示遮罩。 */
   overlay: HTMLElement;
-  /** PR #10:dash 倍速回调。idle/cooldown=1, dashing=CONFIG.dash.dashMult。controller 不持有 game 状态,只读外部 mult。 */
+  /** dash 倍速回调。idle=1,冲刺=CONFIG.dash.dashMult。controller 不持有 game 状态,只读外部 mult。 */
   getDashMult: () => number;
 }
 
+// 视角 D 删鼠标后,pitch 固定为 PR #8 时的 0.16 默认值(略低头);
+// 改为动态可调由 playtest 需求驱动,目前 inline 常量最简洁。
+const FIXED_PITCH = 0.16;
+
 export function createThirdPersonController(opts: ControllerOptions): ThirdPersonController {
-  const { camera, dom, player, colliders, bounds, overlay, getDashMult } = opts;
+  const { camera, dom: _dom, player, colliders, bounds, overlay, getDashMult } = opts;
+  void _dom; // dom 仅用于历史 pointer lock;视角 D 不再使用,保留接口不破外部调用点
 
   let yaw = 0;           // 0 = 相机在角色 +z 后方,看向 -z(书库深处)
-  let pitch = 0.16;      // 默认微低头("镜头要向下一点")
   const keys = new Set<string>();
-  let prevShift = false; // Shift 边沿触发 dash(requestDash 仅按 shift-down 第一帧触发)
 
-  // 监听 window:遮罩层覆盖 canvas 时点击事件不会落到 dom 上
-  window.addEventListener('click', () => {
-    if (document.pointerLockElement === dom) return;
-    // 非可信手势(自动化脚本点击)下 requestPointerLock 的 promise 会 reject,吞掉防噪音
-    const result = dom.requestPointerLock() as unknown;
-    if (result instanceof Promise) result.catch(() => {});
+  // 视角 D:点击 overlay 直接开始(无 pointer lock,无鼠标依赖)
+  // commit 5 在此基础上加 gameStarted flag 与胜负早退门;此 commit 只保证可点击进入。
+  overlay.addEventListener('click', () => {
+    overlay.style.display = 'none';
   });
-  document.addEventListener('pointerlockchange', () => {
-    overlay.style.display = document.pointerLockElement === dom ? 'none' : '';
-  });
-  document.addEventListener('mousemove', (e: MouseEvent) => {
-    if (document.pointerLockElement !== dom) return;
-    yaw -= e.movementX * CONFIG.camera.mouseSens;
-    pitch += e.movementY * CONFIG.camera.mouseSens;
-    pitch = Math.min(CONFIG.camera.pitchMax, Math.max(CONFIG.camera.pitchMin, pitch));
-  });
+
   window.addEventListener('keydown', (e: KeyboardEvent) => keys.add(e.code));
   window.addEventListener('keyup', (e: KeyboardEvent) => keys.delete(e.code));
 
@@ -102,41 +94,33 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
     getInput: () => {
       const fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
       const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
-      const shiftNow = keys.has('ShiftLeft') || keys.has('ShiftRight');
-      const shiftEdge = shiftNow && !prevShift;
-      prevShift = shiftNow;
-      return { fwd, strafe, shift: shiftNow, shiftEdge };
+      const shift = keys.has('ShiftLeft') || keys.has('ShiftRight');
+      return { fwd, strafe, shift };
     },
     update: (dt: number) => {
-      // ── 移动(相对相机朝向)──
+      // ── 视角 D:A/D 转向(W/S 不参与) ──
       const fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
       const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
-      const moving = fwd !== 0 || strafe !== 0;
 
-      if (moving) {
-        const sinY = Math.sin(yaw);
-        const cosY = Math.cos(yaw);
-        // forward=(-sinY,0,-cosY), right=(cosY,0,-sinY)
-        let mx = -sinY * fwd + cosY * strafe;
-        let mz = -cosY * fwd - sinY * strafe;
-        const len = Math.hypot(mx, mz);
-        mx /= len;
-        mz /= len;
-
-        // PR #10:速度由 dash 倍速决定(idle/cooldown=walkSpeed, dashing=walkSpeed × dashMult),
-        // Shift 不再做持续 sprint(requestDash 由主循环边沿触发,这里只读 mult)
-        const speed = CONFIG.player.walkSpeed * getDashMult();
-        player.position.x += mx * speed * dt;
-        resolveAxis('x');
-        player.position.z += mz * speed * dt;
-        resolveAxis('z');
-
-        // 面朝移动方向(最短角插值)
-        const targetRot = Math.atan2(-mx, -mz);
-        let delta = targetRot - player.rotation.y;
-        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-        player.rotation.y += delta * Math.min(1, CONFIG.player.turnLerp * dt);
+      if (strafe !== 0) {
+        // strafe=+1 (D) → yaw -= (向右转,符合"右转看右手"直觉)
+        yaw -= strafe * CONFIG.player.turnRate * dt;
       }
+
+      // ── 移动:W/S 沿角色朝向前后(无 strafe 平移) ──
+      if (fwd !== 0) {
+        // 视角 D 删 sprintSpeed;速度纯由 walkSpeed * dashMult 决定
+        const speed = CONFIG.player.walkSpeed * getDashMult();
+        const moveX = -Math.sin(yaw) * fwd * speed * dt;
+        const moveZ = -Math.cos(yaw) * fwd * speed * dt;
+        player.position.x += moveX;
+        resolveAxis('x');
+        player.position.z += moveZ;
+        resolveAxis('z');
+      }
+
+      // 角色朝向 = yaw 即时(tank-style,无需 lerp)
+      player.rotation.y = yaw;
 
       // 场地边界
       const hw = bounds.w / 2 - 0.4;
@@ -145,7 +129,7 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
       player.position.z = Math.min(hd, Math.max(-hd, player.position.z));
 
       // ── 越肩相机 ──
-      euler.set(pitch, yaw, 0);
+      euler.set(FIXED_PITCH, yaw, 0);
       camOffset.set(CONFIG.camera.side, CONFIG.camera.up, CONFIG.camera.dist).applyEuler(euler);
       headPos.copy(player.position);
       headPos.y += 1.4;
@@ -168,10 +152,12 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
       const dampFactor = 1 - Math.exp(-CONFIG.camera.dampLambda * dt);
       camera.position.lerp(targetCamPos, dampFactor);
 
-      // backlog #001:damp 后再 clamp 相机距 head 下限,贴墙不近脸(业界 90% 三人称标准)
+      // backlog #001:damp 后再 clamp 相机距 head 下限,贴墙不近脸;
+      // PR #12 §2.9 NaN 防护:dist=0(相机正好叠在 headPos 上)时跳过 clamp,
+      // 否则 divide-by-0 → dir.multiplyScalar(Inf) → camera.position 写入 NaN。
       const dir = tmp.subVectors(camera.position, headPos);
       const dist = dir.length();
-      if (dist < CONFIG.camera.minDist) {
+      if (dist > 1e-6 && dist < CONFIG.camera.minDist) {
         dir.multiplyScalar(CONFIG.camera.minDist / dist);
         camera.position.copy(headPos).add(dir);
       }
