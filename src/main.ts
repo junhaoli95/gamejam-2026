@@ -46,12 +46,13 @@ document.body.appendChild(overlay);
 // --- Runtime + PlayerStats(PR #10 — 必须先于 controller 实例化,因 controller 需读 dash mult)
 const runtime = {
   battery: CONFIG.battery.startPercent,
-  pips: CONFIG.dash.startPips,
+  pips: CONFIG.dash.startEnergy,
   appOpen: { RADAR: false, MAP: false, QUERY: false },
 };
 const playerStats = mountPlayerStats({ runtime });
 
-// --- Controller(PR #10:注入 dash 倍速回调,Shift 边沿由主循环读 getInput 喂 requestDash)
+// --- Controller(PR #12:Shift 持续按住由 playerStats.step 经 input.shift 消耗 energy;
+// controller 仍走 getDashMult 回调读速度倍率)
 const controller = createThirdPersonController({
   camera,
   dom: renderer.domElement,
@@ -110,14 +111,9 @@ function animate() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
 
-  // PR #10:每帧先读 input(Shift 边沿 + WASD 方向),Shift down 边沿则触发 requestDash
-  // (requestDash 三道门:phase==idle / pip≥1 / 方向非零; 否则不耗 pip)
+  // PR #12:step 改签 (dt, input);Shift 持续消耗 energy(不再边沿触发)。
   const input = controller.getInput();
-  if (input.shiftEdge) {
-    playerStats.requestDash({ fwd: input.fwd, strafe: input.strafe });
-  }
-  // 推进资源状态机(先 step 设 dash phase,再 controller.update 让 speed 读 dash 多倍)
-  playerStats.step(dt);
+  playerStats.step(dt, input);
   controller.update(dt);
   update(dt);
   renderer.render(scene, camera);

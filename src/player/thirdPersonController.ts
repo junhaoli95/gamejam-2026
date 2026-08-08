@@ -17,7 +17,7 @@ export interface ThirdPersonController {
   getYaw: () => number;
   /** 读取这一帧的方向/Shift 状态(ShiftEdge 为边沿触发,本帧内只可读一次,会消费 prev shift 标记)。
    *  供主循环把 shiftEdge 喂给 playerStats.requestDash 把方向喂给 playerStats.step。 */
-  getInput: () => { fwd: number; strafe: number; shiftEdge: boolean };
+  getInput: () => { fwd: number; strafe: number; shift: boolean; shiftEdge: boolean };
 }
 
 interface ControllerOptions {
@@ -105,7 +105,7 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
       const shiftNow = keys.has('ShiftLeft') || keys.has('ShiftRight');
       const shiftEdge = shiftNow && !prevShift;
       prevShift = shiftNow;
-      return { fwd, strafe, shiftEdge };
+      return { fwd, strafe, shift: shiftNow, shiftEdge };
     },
     update: (dt: number) => {
       // ── 移动(相对相机朝向)──
