@@ -2,11 +2,13 @@ import type { SharedState } from '../platform/sharedState';
 
 // ============================================================================
 // GTA 提示系统(PR #13 §3.3)— 左上 contextual prompt + 中下常驻任务条
+// + PR #14 右上角 stamina bar(GTA Vice City 同款)
 // ----------------------------------------------------------------------------
 // 纯 DOM 层:只读 getSharedState(),不发用户意图,无 state machine。
 // - .gta-prompt:玩家近空桩(state.nearOutlet === true)时左上淡入 "⚡ 按 [E] 充电",
 //   走开淡出。display 由 JS 管理(先显形再切 opacity,保证 transition 生效)。
 // - .gta-objective:中下常驻任务条;胜利/失败弹窗出现时隐藏。
+// - .stamina-bar:右上角冲刺能量条(state.pips 0~1 连续值驱动宽度;<0.2 变红)。
 // ============================================================================
 
 export interface GtaPromptOptions {
@@ -59,6 +61,27 @@ const CSS = `
   white-space: nowrap;
 }
 .gta-objective.hidden { display: none; }
+
+/* PR #14 右上角 stamina bar(GTA Vice City 同款) */
+.stamina-bar {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  width: 120px;
+  height: 8px;
+  background: rgba(0,0,0,0.65);
+  border-radius: 4px;
+  overflow: hidden;
+  z-index: 20;
+  pointer-events: none;
+}
+.stamina-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: #4ec3ff;
+  transition: width 80ms linear;
+}
+.stamina-bar.low .stamina-bar-fill { background: #ff4d4d; }
 `;
 
 function injectStylesOnce(): void {
@@ -83,6 +106,13 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
   objectiveEl.className = 'gta-objective';
   objectiveEl.textContent = opts.objectiveText;
   document.body.appendChild(objectiveEl);
+
+  // PR #14 右上角 stamina bar(fill 宽度 = state.pips × 100%)
+  const staminaEl = document.createElement('div');
+  staminaEl.className = 'stamina-bar';
+  staminaEl.innerHTML = '<div class="stamina-bar-fill"></div>';
+  document.body.appendChild(staminaEl);
+  const staminaFillEl = staminaEl.querySelector<HTMLElement>('.stamina-bar-fill')!;
 
   let promptShown = false;
   let hideTimer = 0;
@@ -110,6 +140,10 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
     const state = opts.getSharedState();
     setPromptVisible(state.nearOutlet === true);
     objectiveEl.classList.toggle('hidden', state.won === true || state.battery <= 0);
+    // stamina bar:fill width = pips × 100%;<0.2 变红(替代 phone HUD 内 pip bar)
+    const pips = Math.max(0, Math.min(1, state.pips));
+    staminaFillEl.style.width = `${pips * 100}%`;
+    staminaEl.classList.toggle('low', pips < 0.2);
   }
   requestAnimationFrame(loop);
 }
