@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视角方案对比 Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; font-family: system-ui, sans-serif; background: #111; }
+  canvas { display: block; }
+
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 16px 24px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0));
+    color: #fff; pointer-events: none; z-index: 10;
+  }
+  #mode-label {
+    font-size: 22px; font-weight: 700; margin-bottom: 6px;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  }
+  #mode-desc {
+    font-size: 14px; opacity: 0.8; line-height: 1.6;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+  #controls {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 16px 24px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.85), rgba(0,0,0,0));
+    color: #fff; pointer-events: none; z-index: 10;
+    font-size: 14px; line-height: 1.8; opacity: 0.7;
+  }
+  .key {
+    display: inline-block; padding: 1px 7px; margin: 0 2px;
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px;
+  }
+  #mode-A { color: #4db8ff; }
+  #mode-D { color: #ffb14d; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="mode-label"></div>
+  <div id="mode-desc"></div>
+</div>
+
+<div id="controls">
+  <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移动 ·
+  <span class="key">Shift</span> 冲刺 ·
+  <span class="key">Tab</span> 切换视角方案 ·
+  <span class="key">空格</span> 暂停/继续 ·
+  方案 B:<span class="key">鼠标拖拽</span> 视角 ·
+  方案 A/C:纯 WASD
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ─── 场景搭建 ───────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a2230);
+scene.fog = new THREE.Fog(0x1a2230, 25, 50);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 80);
+
+// 灯光
+scene.add(new THREE.AmbientLight(0x404050, 1.2));
+const dir = new THREE.DirectionalLight(0xffe9c4, 0.8);
+dir.position.set(10, 20, 5);
+scene.add(dir);
+const hemi = new THREE.HemisphereLight(0x6a8aaa, 0x2a1a10, 0.6);
+scene.add(hemi);
+
+// 地面
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.9 }),
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+// 网格线
+const grid = new THREE.GridHelper(60, 30, 0x3a3a40, 0x2a2a30);
+grid.position.y = 0.01;
+scene.add(grid);
+
+// 充电桩(绿色发光方块)
+const outlets = [];
+const outletMat = new THREE.MeshStandardMaterial({
+  color: 0x2dff7a, emissive: 0x2dff7a, emissiveIntensity: 0.6,
+});
+for (let i = 0; i < 12; i++) {
+  const angle = (i / 12) * Math.PI * 2;
+  const r = 6 + (i % 3) * 3;
+  const x = Math.cos(angle) * r;
+  const z = Math.sin(angle) * r;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5), outletMat);
+  m.position.set(x, 0.4, z);
+  scene.add(m);
+  outlets.push({ x, z, mesh: m });
+}
+
+// 一些障碍方块(模拟书架/桌)
+const obsMat = new THREE.MeshStandardMaterial({ color: 0x4a3a28, roughness: 0.8 });
+const obstacles = [];
+const obsPositions = [
+  [-4, 0, -3, 2, 1.5, 6],
+  [4, 0, -2, 2, 1.5, 5],
+  [-3, 0, 5, 5, 1.5, 2],
+  [3, 0, 4, 4, 1.5, 2],
+  [0, 0, -8, 8, 2, 1.5],
+];
+for (const [x,y,z,w,h,d] of obsPositions) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), obsMat);
+  m.position.set(x, y + h/2, z);
+  scene.add(m);
+  obstacles.push(m);
+}
+
+// 角色(猫的简化:球体 + 朝向锥)
+const player = new THREE.Group();
+const body = new THREE.Mesh(
+  new THREE.SphereGeometry(0.35, 16, 12),
+  new THREE.MeshStandardMaterial({ color: 0xffb14d, roughness: 0.6 }),
+);
+body.position.y = 0.35;
+player.add(body);
+const nose = new THREE.Mesh(
+  new THREE.ConeGeometry(0.12, 0.3, 8),
+  new THREE.MeshStandardMaterial({ color: 0xff8800 }),
+);
+nose.position.set(0, 0.35, -0.4);
+nose.rotation.x = -Math.PI / 2;
+player.add(nose);
+player.position.set(0, 0, 8);
+scene.add(player);
+
+// ─── 输入 ───────────────────────────────────────────────────────
+const keys = new Set();
+addEventListener('keydown', (e) => {
+  keys.add(e.code);
+  if (e.code === 'Tab') { e.preventDefault(); toggleMode(); }
+  if (e.code === 'Space') { e.preventDefault(); paused = !paused; }
+});
+addEventListener('keyup', (e) => keys.delete(e.code));
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ─── B 方案:鼠标拖拽视角 ──────────────────────────────────────
+let mouseDragging = false;
+let mouseLastX = 0;
+renderer.domElement.addEventListener('mousedown', (e) => {
+  if (mode !== 'B') return;
+  mouseDragging = true;
+  mouseLastX = e.clientX;
+  renderer.domElement.style.cursor = 'grabbing';
+});
+addEventListener('mousemove', (e) => {
+  if (!mouseDragging || mode !== 'B') return;
+  const dx = e.clientX - mouseLastX;
+  mouseLastX = e.clientX;
+  yaw -= dx * 0.005;  // 拖拽灵敏度
+});
+addEventListener('mouseup', () => {
+  mouseDragging = false;
+  renderer.domElement.style.cursor = mode === 'B' ? 'grab' : 'default';
+});
+
+// ─── 视角方案 ───────────────────────────────────────────────────
+let mode = 'D'; // 当前选定方案(MODE_ORDER[0]='D')
+let paused = false;
+let yaw = 0;           // 角色当前朝向(弧度,0=面向 -Z)
+let camYaw = 0;        // 相机当前 yaw(spring-damp 跟随)
+let dashTimer = 0;
+let dashMult = 1;
+
+const MODE_INFO = {
+  D: {
+    label: '方案 D:跟随相机 + 方向键转向(坦克式)',
+    desc: 'WASD 直接控制角色朝向 — 按 D 角色右转,相机自动跟转。移动时角色朝移动方向,静止时保持最后朝向。零额外视角操作。',
+    color: '#ffb14d',
+  },
+  A: {
+    label: '方案 A:自动转向移动方向(摇杆式)',
+    desc: 'WASD 控制移动方向,角色自动转向移动方向,相机跟在身后。与 D 的区别:静止时按 A 角色不会转向,只有真正移动时才转。',
+    color: '#4db8ff',
+  },
+  B: {
+    label: '方案 B:虚拟摇杆 / 鼠标拖拽视角',
+    desc: 'WASD 沿角色朝向移动(前后左右),鼠标按住左右拖拽控制 yaw 视角。类似 PUBG Mobile 右半屏拖视角。双手操作:左手移动,右手转视角。',
+    color: '#ff6b6b',
+  },
+  C: {
+    label: '方案 C:固定俯视相机(45°)',
+    desc: '相机固定在斜上方 45° 俯视,不跟随角色转向。WASD 按世界方向移动(W=北 S=南 A=西 D=东)。最简单,像 Diablo / Wild Rift。角色自动朝移动方向转。',
+    color: '#a78bfa',
+  },
+};
+
+const MODE_ORDER = ['D', 'A', 'B', 'C'];
+let modeIdx = 0;
+function toggleMode() {
+  modeIdx = (modeIdx + 1) % MODE_ORDER.length;
+  mode = MODE_ORDER[modeIdx];
+  updateHud();
+  renderer.domElement.style.cursor = mode === 'B' ? 'grab' : 'default';
+}
+
+function updateHud() {
+  const info = MODE_INFO[mode];
+  document.getElementById('mode-label').textContent = info.label;
+  document.getElementById('mode-label').style.color = info.color;
+  document.getElementById('mode-desc').textContent = info.desc;
+}
+updateHud();
+
+// ─── 主循环 ─────────────────────────────────────────────────────
+const tmp = new THREE.Vector3();
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  if (paused) { renderer.render(scene, camera); return; }
+
+  // 读输入
+  const fwd = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+  const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+  const sprint = keys.has('ShiftLeft') || keys.has('ShiftRight');
+
+  // dash(简化:Shift 持续 = 1.8x,不耗 pip)
+  dashMult = sprint ? 1.8 : 1;
+  const speed = 3.0 * dashMult;
+
+  if (mode === 'D') {
+    // ─── 方案 D:方向键直接转向 ───────────────────────────────
+    // A/D 直接旋转角色 yaw,W/S 沿角色朝向前后移动
+    if (strafe !== 0) {
+      yaw -= strafe * 3.0 * dt;  // 转向速率 3 rad/s
+    }
+    if (fwd !== 0) {
+      const moveX = -Math.sin(yaw) * fwd * speed * dt;
+      const moveZ = -Math.cos(yaw) * fwd * speed * dt;
+      player.position.x += moveX;
+      player.position.z += moveZ;
+    }
+    player.rotation.y = yaw;
+
+  } else if (mode === 'A') {
+    // ─── 方案 A:自动转向移动方向 ─────────────────────────────
+    const moveX = strafe * speed * dt;
+    const moveZ = -fwd * speed * dt;  // W = -Z 方向
+    player.position.x += moveX;
+    player.position.z += moveZ;
+    if (fwd !== 0 || strafe !== 0) {
+      // targetYaw 让 nose (-Z 初始) 指向
+      const targetYaw = Math.atan2(-strafe, fwd);
+      let diff = targetYaw - yaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      yaw += diff * Math.min(1, 10 * dt);
+      player.rotation.y = yaw;
+    }
+
+  } else if (mode === 'B') {
+    // ─── 方案 B:鼠标拖拽视角, WASD 沿角色朝向 FPS 式移动 ───
+    // yaw 已由鼠标拖拽更新
+    const fX = -Math.sin(yaw), fZ = -Math.cos(yaw);  // forward
+    const rX = Math.cos(yaw),  rZ = -Math.sin(yaw);   // right
+    player.position.x += (fX * fwd + rX * strafe) * speed * dt;
+    player.position.z += (fZ * fwd + rZ * strafe) * speed * dt;
+    player.rotation.y = yaw;
+
+  } else if (mode === 'C') {
+    // ─── 方案 C:固定俯视相机, WASD = 世界方向 ───────────────
+    // 角色自动朝移动方向转
+    const dx = strafe * speed * dt;
+    const dz = -fwd * speed * dt;
+    player.position.x += dx;
+    player.position.z += dz;
+    if (Math.abs(dx) > 1e-6 || Math.abs(dz) > 1e-6) {
+      const targetYaw = Math.atan2(-strafe, fwd);
+      let diff = targetYaw - yaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      yaw += diff * Math.min(1, 10 * dt);
+      player.rotation.y = yaw;
+    }
+  }
+
+  // ─── 相机(C 方案固定俯视, 其余 spring-damp 跟随)──────────
+  if (mode === 'C') {
+    // 固定 45° 俯视:相机在玩家上方 12m, 后方 12m, 不跟随 yaw
+    const fixedCamPos = new THREE.Vector3(
+      player.position.x + 0.1,
+      12,
+      player.position.z + 12,
+    );
+    camera.position.lerp(fixedCamPos, 1 - Math.exp(-8 * dt));
+    camera.lookAt(player.position.x, 0.3, player.position.z);
+  } else {
+    // spring-damp 跟随 yaw(方案 A/B/D 共用)
+    const headPos = tmp.set(player.position.x, 1.35, player.position.z);
+    const dampLambda = 8;
+    camYaw += (yaw - camYaw) * (1 - Math.exp(-dampLambda * dt));
+
+    const camDist = 3.0;
+    const camSide = 0;
+    const camUp = 1.2;
+    const targetCamPos = new THREE.Vector3(
+      headPos.x + Math.sin(camYaw) * camDist + camSide * Math.cos(camYaw),
+      headPos.y + camUp,
+      headPos.z + Math.cos(camYaw) * camDist - camSide * Math.sin(camYaw),
+    );
+    camera.position.lerp(targetCamPos, 1 - Math.exp(-8 * dt));
+    camera.lookAt(headPos.x, headPos.y - 0.2, headPos.z);
+  }
+
+  // 充电桩呼吸
+  const t = performance.now() / 1000;
+  outletMat.emissiveIntensity = 0.5 + 0.3 * Math.sin(t * 3);
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
