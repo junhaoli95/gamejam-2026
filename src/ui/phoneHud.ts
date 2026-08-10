@@ -197,7 +197,7 @@ const CSS = `
 .phone-app-icon {
   position: relative;
   width: 60px;
-  height: 80px;
+  height: 92px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -264,6 +264,34 @@ const CSS = `
 .phone-app-icon.pending .install-active { stroke-dashoffset: 163.42; }
 .phone-app-icon.pending .phone-app-glyph { filter: grayscale(0.8) brightness(0.6); }
 .phone-app-icon.pending .phone-app-glyph.pending { filter: grayscale(0.4) brightness(0.85); opacity: 0.55; }
+
+/* PR #13 §3.1 app header bar(标题+费率+返回提示) */
+.phone-app-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  box-sizing: border-box;
+  background: rgba(0,0,0,0.55);
+  border-bottom: 1.5px solid var(--app-accent);
+  color: #fff;
+}
+.phone-app-header.map   { --app-accent: #2a6cff; }
+.phone-app-header.radar { --app-accent: #ff8a3a; }
+.phone-app-header.query { --app-accent: #2dff7a; }
+.app-header-back  { font: 9px sans-serif; color: rgba(255,255,255,0.7); }
+.app-header-title { font: bold 10px sans-serif; letter-spacing: 0.04em; }
+.app-header-rate  { font: 9px sans-serif; color: var(--app-accent); }
+
+/* PR #13 §3.1 home icon 费率标注 */
+.phone-app-rate {
+  font: bold 9px sans-serif;
+  color: #ffd24a;
+  text-align: center;
+}
 
 /* MAP / QUERY canvas container */
 .phone-app-view .canvas-wrap {
@@ -513,12 +541,27 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-grid"></div>
     </div>
     <div class="phone-app-view map">
+      <div class="phone-app-header map">
+        <span class="app-header-back">← 返回 (1)</span>
+        <span class="app-header-title">🗺 MAP</span>
+        <span class="app-header-rate">耗电 ×2</span>
+      </div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
     </div>
     <div class="phone-app-view radar">
+      <div class="phone-app-header radar">
+        <span class="app-header-back">← 返回 (2)</span>
+        <span class="app-header-title">📡 RADAR</span>
+        <span class="app-header-rate">耗电 ×3</span>
+      </div>
       <div class="canvas-wrap"><canvas width="220" height="220"></canvas></div>
     </div>
     <div class="phone-app-view query">
+      <div class="phone-app-header query">
+        <span class="app-header-back">← 返回 (3)</span>
+        <span class="app-header-title">⚡ QUERY</span>
+        <span class="app-header-rate">耗电 ×4</span>
+      </div>
       <div class="phone-query-legend"></div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
     </div>
@@ -549,12 +592,6 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   const gridEl     = chassis.querySelector<HTMLElement>('.phone-app-grid')!;
   const queryLegendEl = chassis.querySelector<HTMLElement>('.phone-query-legend')!;
 
-  // PR #12 §2.6.5 restart 按钮 click → opts.onAppAction({ kind: 'restart' })
-  // 高于 .phone-hud-root 的 pointer-events:none(通过 .phone-restart-btn
-  // 的 pointer-events:auto 子元素打开)以接收点击
-  restartOverBtn.addEventListener('click', () => opts.onAppAction({ kind: 'restart' }));
-  restartWinBtn.addEventListener('click', () => opts.onAppAction({ kind: 'restart' }));
-
   const mapCanvas    = mapEl .querySelector<HTMLCanvasElement>('canvas')!;
   const radarCanvas  = radarEl.querySelector<HTMLCanvasElement>('canvas')!;
   const queryCanvas  = queryEl.querySelector<HTMLCanvasElement>('canvas')!;
@@ -568,11 +605,12 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   });
 
   // ── app icon grid + onboarding state ─────────────────────────────────────
-  type IconDef = { id: AppId; glyphClass: string; emoji: string; label: string; isReal: boolean };
+  // PR #13 §3.1:rate 字段 = home icon 下显示的耗电倍率(isReal=false 等待安装 icon 不显示)
+  type IconDef = { id: AppId; glyphClass: string; emoji: string; label: string; rate?: string; isReal: boolean };
   const ICONS: IconDef[] = [
-    { id: 'map',   glyphClass: 'map',    emoji: '🗺', label: 'MAP',   isReal: true },
-    { id: 'radar', glyphClass: 'radar',  emoji: '📡', label: 'RADAR', isReal: true },
-    { id: 'query', glyphClass: 'query',  emoji: '⚡', label: 'QUERY', isReal: true },
+    { id: 'map',   glyphClass: 'map',    emoji: '🗺', label: 'MAP',   rate: '×2', isReal: true },
+    { id: 'radar', glyphClass: 'radar',  emoji: '📡', label: 'RADAR', rate: '×3', isReal: true },
+    { id: 'query', glyphClass: 'query',  emoji: '⚡', label: 'QUERY', rate: '×4', isReal: true },
     { id: 'home',  glyphClass: 'pending', emoji: '🐾', label: '等待安装', isReal: false },
   ];
 
@@ -633,6 +671,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       ${icon.isReal ? ringSvg() : ''}
       <div class="phone-app-glyph ${icon.glyphClass}">${icon.emoji}</div>
       <div class="phone-app-label">${icon.label}</div>
+      ${icon.rate ? `<div class="phone-app-rate">${icon.rate}</div>` : ''}
       <div class="phone-app-state-tag">等待</div>`;
     iconEls[icon.id] = cell;
     gridEl.appendChild(cell);
@@ -666,6 +705,19 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     opts.onAppAction({ kind: 'toggle-app', app: target });
   }
 
+  // PR #13 §3.1 #5:restart 时手机回 home + emit 旧 app 关(如果有 app 开着)
+  // 在 toggleApp 之后定义(依赖 activeApp / setActiveApp / opts)
+  restartOverBtn.addEventListener('click', () => {
+    if (activeApp !== 'home') opts.onAppAction({ kind: 'toggle-app', app: activeApp });
+    setActiveApp('home');
+    opts.onAppAction({ kind: 'restart' });
+  });
+  restartWinBtn.addEventListener('click', () => {
+    if (activeApp !== 'home') opts.onAppAction({ kind: 'toggle-app', app: activeApp });
+    setActiveApp('home');
+    opts.onAppAction({ kind: 'restart' });
+  });
+
   // ── keyboard ─────────────────────────────────────────────────────────────
   function onKey(e: KeyboardEvent): void {
     if (e.repeat) return;
@@ -674,6 +726,13 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       case 'Digit1': toggleApp('map');    break;
       case 'Digit2': toggleApp('radar');  break;
       case 'Digit3': toggleApp('query');  break;
+      // PR #13 §3.1:Esc 切回 home(emit 旧 app 关)
+      case 'Escape':
+        if (activeApp !== 'home') {
+          opts.onAppAction({ kind: 'toggle-app', app: activeApp });
+          setActiveApp('home');
+        }
+        break;
       default: break;
     }
   }
