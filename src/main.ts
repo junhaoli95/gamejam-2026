@@ -22,7 +22,7 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // --- Scene ---
-const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets } =
+const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, terrain } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // --- 点击进入指针锁的提示遮罩 ---
@@ -78,10 +78,14 @@ const controller = createThirdPersonController({
 // PR #10 在 main 包一层 wrap,用 runtime 真值覆盖 battery/pips 字段(sharedState.ts 文件 0 改,§0.3)。
 const { getSharedState: getRawSharedState } = createSharedStateFacade(player, controller, outlets);
 
-/** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 加 won:gameWon(给 phone HUD / minimap / __debug 读)。 */
+/** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 won + PR #13 terrain/nearOutlet。 */
 function getSharedState() {
   const s = getRawSharedState();
-  return { ...s, battery: runtime.battery, pips: runtime.pips, won: gameWon };
+  // PR #13 #9:近空桩标志(每帧算一次,供 gtaPrompt 显隐左上 prompt)
+  const nearOutlet = s.outlets.some(o =>
+    !o.occupied && Math.hypot(o.x - s.player.x, o.z - s.player.z) < CONFIG.hud.promptRange,
+  );
+  return { ...s, battery: runtime.battery, pips: runtime.pips, won: gameWon, terrain, nearOutlet };
 }
 
 // --- Mount phone HUD stub(Sam 在 PR #9 替换 mountPhoneHud 实现,调用点不动)---
@@ -96,7 +100,8 @@ mountPhoneHud({
       gameOver = false;
       playerStats.reset();
       player.position.set(0, 0, 8.5);
-      randomizeOccupiedOutlets();
+      // PR #13 #5:新 seed,每局 NPC 占位分布不同(QTE 方案已砍,无 state 需重置)
+      randomizeOccupiedOutlets(CONFIG.npc.count, (Date.now() % 100000));
     }
   },
 });
