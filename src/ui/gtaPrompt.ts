@@ -47,9 +47,8 @@ const CSS = `
 }
 .gta-objective {
   position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 56px; /* 在 .gta-prompt(top:24px)下方垂直堆叠 */
+  left: 24px;
   z-index: 20;
   background: rgba(0,0,0,0.55);
   border-radius: 4px;
