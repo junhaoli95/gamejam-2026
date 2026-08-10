@@ -4,6 +4,8 @@ import { createThirdPersonController } from './player/thirdPersonController';
 import { createSharedStateFacade } from './platform/sharedState';
 import { mountPhoneHud } from './ui/phoneHud';
 import { mountGtaPrompt } from './ui/gtaPrompt';
+import { mountMissionToast } from './ui/missionToast';
+import { mountHighScore } from './ui/highScore';
 import { mountPlayerStats } from './game/playerStats';
 import { createNpcController } from './game/npc';
 import { createNpcMeshManager } from './scene/npcMesh';
@@ -131,6 +133,10 @@ mountPhoneHud({
 // PR #13 §3.4:GTA 提示系统 mount(左上 prompt + 中下任务条)
 // TODO PR #13-David merge 后改 CONFIG.hud.objectiveText(Sam 先硬编码)
 mountGtaPrompt({ getSharedState, objectiveText: '电量耗尽之前找到充电位置' });
+
+// PR #16 §2.3 奖励系统 mount(mountGtaPrompt 之后)
+mountMissionToast({ getSharedState });
+mountHighScore({ getSharedState });
 
 // --- PR #16 B:NPC AI(状态机 + 头顶箭头)---
 const npcMeshManager = createNpcMeshManager(scene, getNpcMeshes());
