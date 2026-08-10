@@ -3,6 +3,7 @@ import { createLibraryScene, DEFAULT_DEBUG_PARAMS } from './scene/loadLibrarySce
 import { createThirdPersonController } from './player/thirdPersonController';
 import { createSharedStateFacade } from './platform/sharedState';
 import { mountPhoneHud } from './ui/phoneHud';
+import { mountGtaPrompt } from './ui/gtaPrompt';
 import { mountPlayerStats } from './game/playerStats';
 import { CONFIG } from './game/config';
 import './style.css';
@@ -100,6 +101,10 @@ mountPhoneHud({
     }
   },
 });
+
+// PR #13 §3.4:GTA 提示系统 mount(左上 prompt + 中下任务条)
+// TODO PR #13-David merge 后改 CONFIG.hud.objectiveText(Sam 先硬编码)
+mountGtaPrompt({ getSharedState, objectiveText: '电量耗尽之前找到充电位置' });
 
 // PR #12 §2.5.2:E 键近空桩(≤1.5m)判胜
 window.addEventListener('keydown', (e) => {
