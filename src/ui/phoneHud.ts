@@ -162,10 +162,6 @@ const CSS = `
   50%, 100% { opacity: 0.35; }
 }
 
-.phone-pip-bar { position: absolute; left: 12px; top: 28px; width: 60px; height: 4px; background: rgba(255,255,255,0.18); border-radius: 2px; overflow: hidden; z-index: 10; pointer-events: none; }
-.phone-pip-bar-fill { height: 100%; background: linear-gradient(90deg,#ffb14d,#ff8800); transform-origin: left; transition: transform .1s linear; }
-.phone-pip-bar-fill.low { background: linear-gradient(90deg,#ff4d4d,#c92828); }
-
 /* app area */
 .phone-app-area {
   position: absolute;
@@ -525,7 +521,6 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     </span>
   </div>
   <div class="phone-lowbatt-banner"></div>
-  <span class="phone-pip-bar"><span class="phone-pip-bar-fill"></span></span>
   <div class="phone-app-area">
     <div class="phone-home active">
       <div class="phone-app-grid"></div>
@@ -569,8 +564,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   const battTimeEl = chassis.querySelector<HTMLElement>('.phone-battery-time')!;
   const battPctEl  = chassis.querySelector<HTMLElement>('.phone-battery-pct')!;
   const bannerEl   = chassis.querySelector<HTMLElement>('.phone-lowbatt-banner')!;
-  // PR #12 §2.6.4 能量条 fill 与 §2.6.5 胜负弹窗
-  const pipBarFillEl = chassis.querySelector<HTMLElement>('.phone-pip-bar-fill')!;
+  // PR #12 §2.6.5 胜负弹窗(refs;§2.6.4 pip bar 已删,能量条移至 gtaPrompt 右上角 stamina bar)
   const gameOverEl   = chassis.querySelector<HTMLElement>('.phone-game-over')!;
   const gameWinEl    = chassis.querySelector<HTMLElement>('.phone-game-win')!;
   const restartOverBtn = chassis.querySelector<HTMLElement>('.phone-game-over .phone-restart-btn')!;
@@ -770,11 +764,6 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     qEmptyEl.textContent = String(emptyN);
     qOccEl.textContent = String(occN);
     qYouEl.textContent = '0'; // player-occupied stub; PR #11 wires to real status
-
-    // PR #12 §2.6.4 能量条 fill — state.pips 是 0~1 连续 energy(原 0~3 语义已改)
-    const energy = Math.max(0, Math.min(1, state.pips));
-    pipBarFillEl.style.transform = `scaleX(${energy})`;
-    pipBarFillEl.classList.toggle('low', energy < 0.2);
 
     // PR #12 §2.6.5 胜负弹窗 toggle(hidden)-没电(state.won=false && battery<=0)→显 game over,
     // 胜利(state.won=true)→显 win。state.won / battery 都由 getSharedState()[commit 5]
