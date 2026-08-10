@@ -222,6 +222,8 @@ export interface LibraryScene {
   setOutletOccupied: (index: number, occupied: boolean) => void;
   /** PR #13 新增:静态地形 AABB 列表(书架+四人桌+柱子),供 SharedState/minimap 画地形。rebuildTableZone 不影响(引用稳定)。 */
   terrain: Array<{ x: number; z: number; w: number; d: number; kind: 'shelf' | 'table' | 'column' }>;
+  /** PR #16 B:暴露 NPC mesh 数组,供 NpcMeshManager 创建头顶箭头 + 同步位置(引用稳定,restart 原地刷新)。 */
+  getNpcMeshes: () => THREE.Group[];
 }
 
 /** 占位椅:座面 + 靠背(靠背在远离桌子一侧,axis=椅子朝向所在轴)。 */
@@ -911,5 +913,6 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     randomizeOccupiedOutlets,
     setOutletOccupied,
     terrain,
+    getNpcMeshes: () => npcMeshes,
   };
 }

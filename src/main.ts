@@ -5,6 +5,8 @@ import { createSharedStateFacade } from './platform/sharedState';
 import { mountPhoneHud } from './ui/phoneHud';
 import { mountGtaPrompt } from './ui/gtaPrompt';
 import { mountPlayerStats } from './game/playerStats';
+import { createNpcController } from './game/npc';
+import { createNpcMeshManager } from './scene/npcMesh';
 import { CONFIG } from './game/config';
 import { mountAudio } from './platform/audio';
 import './style.css';
@@ -24,7 +26,7 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // --- Scene ---
-const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, terrain } =
+const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // --- 点击进入指针锁的提示遮罩 ---
@@ -82,14 +84,23 @@ const controller = createThirdPersonController({
 // PR #10 在 main 包一层 wrap,用 runtime 真值覆盖 battery/pips 字段(sharedState.ts 文件 0 改,§0.3)。
 const { getSharedState: getRawSharedState } = createSharedStateFacade(player, controller, outlets);
 
-/** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 won + PR #13 terrain/nearOutlet。 */
+/** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 won + PR #13 terrain/nearOutlet + PR #16 npcs。 */
 function getSharedState() {
   const s = getRawSharedState();
   // PR #13 #9:近空桩标志(每帧算一次,供 gtaPrompt 显隐左上 prompt)
   const nearOutlet = s.outlets.some(o =>
     !o.occupied && Math.hypot(o.x - s.player.x, o.z - s.player.z) < CONFIG.hud.promptRange,
   );
-  return { ...s, battery: runtime.battery, pips: runtime.pips, won: gameWon, terrain, nearOutlet };
+  return {
+    ...s,
+    battery: runtime.battery,
+    pips: runtime.pips,
+    won: gameWon,
+    terrain,
+    nearOutlet,
+    // PR #16 B:NPC 位置 + 状态,供箭头/UI 消费
+    npcs: npcController.entities.map(e => ({ x: e.x, z: e.z, state: e.state, targetIndex: e.targetOutletIndex })),
+  };
 }
 
 // --- Mount phone HUD stub(Sam 在 PR #9 替换 mountPhoneHud 实现,调用点不动)---
@@ -110,6 +121,9 @@ mountPhoneHud({
       player.position.set(0, 0, 8.5);
       // PR #13 #5:新 seed,每局 NPC 占位分布不同(QTE 方案已砍,无 state 需重置)
       randomizeOccupiedOutlets(CONFIG.npc.count, (Date.now() % 100000));
+      // PR #16 B:重开新局,NPC 状态重置 + 位置对齐新摆的坐姿猫
+      npcController.reset(Date.now() % 100000);
+      syncNpcPositionsToMeshes();
     }
   },
 });
@@ -117,6 +131,27 @@ mountPhoneHud({
 // PR #13 §3.4:GTA 提示系统 mount(左上 prompt + 中下任务条)
 // TODO PR #13-David merge 后改 CONFIG.hud.objectiveText(Sam 先硬编码)
 mountGtaPrompt({ getSharedState, objectiveText: '电量耗尽之前找到充电位置' });
+
+// --- PR #16 B:NPC AI(状态机 + 头顶箭头)---
+const npcMeshManager = createNpcMeshManager(scene, getNpcMeshes());
+const npcController = createNpcController({
+  getOutletCount: () => outlets.length,
+  getOutletPos: (i) => ({ x: outlets[i].x, z: outlets[i].z }),
+  isOutletOccupied: (i) => outlets[i].occupied,
+  setOutletOccupied: setOutletOccupied,
+  npcCount: CONFIG.npc.count,
+  cfg: CONFIG.npc,
+});
+
+// 实体初始位置对齐场景已就座猫(randomizeOccupiedOutlets 摆位),避免开局瞬移
+function syncNpcPositionsToMeshes(): void {
+  const meshes = getNpcMeshes();
+  npcController.entities.forEach((e, i) => {
+    const m = meshes[i];
+    if (m) { e.x = m.position.x; e.z = m.position.z; }
+  });
+}
+syncNpcPositionsToMeshes();
 
 // PR #12 §2.5.2:E 键近空桩(≤1.5m)判胜
 window.addEventListener('keydown', (e) => {
@@ -172,6 +207,9 @@ function animate() {
     const input = controller.getInput();
     playerStats.step(dt, input);
     controller.update(dt);
+    // PR #16 B:NPC 状态机推进 + 头顶箭头/mesh 同步
+    npcController.update(dt);
+    npcMeshManager.update(npcController.entities);
     // §2.5.5 game over 检测:battery=0 且未胜 → gameOver=true
     if (runtime.battery <= 0) {
       gameOver = true;
