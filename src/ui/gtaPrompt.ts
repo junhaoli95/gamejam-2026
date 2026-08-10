@@ -1,13 +1,12 @@
 import type { SharedState } from '../platform/sharedState';
 
 // ============================================================================
-// GTA 提示系统(PR #13 §3.3)— 左上 contextual prompt + 中下常驻任务条
-// + PR #14 右上角 stamina bar(GTA Vice City 同款)
+// GTA 提示系统(PR #13 §3.3 + PR #15 迭代)— 左上单槽位提示 + 右上 stamina bar
 // ----------------------------------------------------------------------------
 // 纯 DOM 层:只读 getSharedState(),不发用户意图,无 state machine。
-// - .gta-prompt:玩家近空桩(state.nearOutlet === true)时左上淡入 "⚡ 按 [E] 充电",
-//   走开淡出。display 由 JS 管理(先显形再切 opacity,保证 transition 生效)。
-// - .gta-objective:中下常驻任务条;胜利/失败弹窗出现时隐藏。
+// - .gta-prompt:左上角单提示槽位(top:24px),内容按优先级替换:
+//   近空桩 → "⚡ 按 [E] 充电";否则 → "📍 {objectiveText}";
+//   胜利/失败弹窗时整个隐藏(淡出)。display 由 JS 管理保证 transition 生效。
 // - .stamina-bar:右上角冲刺能量条(state.pips 0~1 连续值驱动宽度;<0.2 变红)。
 // ============================================================================
 
@@ -31,6 +30,7 @@ const CSS = `
   border-radius: 6px;
   padding: 10px 16px;
   pointer-events: none;
+  white-space: nowrap;
 }
 .gta-prompt.show {
   display: inline-block;
@@ -45,21 +45,6 @@ const CSS = `
   color: #fff;
   font: 14px sans-serif;
 }
-.gta-objective {
-  position: fixed;
-  top: 56px; /* 在 .gta-prompt(top:24px)下方垂直堆叠 */
-  left: 24px;
-  z-index: 20;
-  background: rgba(0,0,0,0.55);
-  border-radius: 4px;
-  padding: 6px 14px;
-  color: rgba(255,255,255,0.85);
-  font: 12px sans-serif;
-  letter-spacing: 0.06em;
-  pointer-events: none;
-  white-space: nowrap;
-}
-.gta-objective.hidden { display: none; }
 
 /* PR #14 右上角 stamina bar(GTA Vice City 同款) */
 .stamina-bar {
@@ -94,17 +79,15 @@ function injectStylesOnce(): void {
 export function mountGtaPrompt(opts: GtaPromptOptions): void {
   injectStylesOnce();
 
+  // 左上角单提示槽位:默认任务条文案,近桩时替换为充电提示(共用同一 DOM + CSS)
   const promptEl = document.createElement('div');
   promptEl.className = 'gta-prompt';
   promptEl.innerHTML =
-    `<span class="gta-prompt-icon">⚡</span>` +
-    `<span class="gta-prompt-text">按 [E] 充电</span>`;
+    `<span class="gta-prompt-icon">📍</span>` +
+    `<span class="gta-prompt-text">${opts.objectiveText}</span>`;
   document.body.appendChild(promptEl);
-
-  const objectiveEl = document.createElement('div');
-  objectiveEl.className = 'gta-objective';
-  objectiveEl.textContent = opts.objectiveText;
-  document.body.appendChild(objectiveEl);
+  const promptIconEl = promptEl.querySelector<HTMLElement>('.gta-prompt-icon')!;
+  const promptTextEl = promptEl.querySelector<HTMLElement>('.gta-prompt-text')!;
 
   // PR #14 右上角 stamina bar(fill 宽度 = state.pips × 100%)
   const staminaEl = document.createElement('div');
@@ -137,8 +120,14 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
   function loop(): void {
     requestAnimationFrame(loop);
     const state = opts.getSharedState();
-    setPromptVisible(state.nearOutlet === true);
-    objectiveEl.classList.toggle('hidden', state.won === true || state.battery <= 0);
+    // 左上槽位:胜利/失败时整个隐藏,否则按优先级切换内容(近桩 → 充电提示,否则任务条)
+    const gameEnd = state.won === true || state.battery <= 0;
+    setPromptVisible(!gameEnd);
+    if (!gameEnd) {
+      const near = state.nearOutlet === true;
+      promptIconEl.textContent = near ? '⚡' : '📍';
+      promptTextEl.textContent = near ? '按 [E] 充电' : opts.objectiveText;
+    }
     // stamina bar:fill width = pips × 100%;<0.2 变红(替代 phone HUD 内 pip bar)
     const pips = Math.max(0, Math.min(1, state.pips));
     staminaFillEl.style.width = `${pips * 100}%`;
