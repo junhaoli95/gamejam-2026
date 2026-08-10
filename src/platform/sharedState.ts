@@ -9,6 +9,11 @@ export interface SharedState {
   npcs: Array<{ x: number; z: number; state: string }>;
   path?: Array<{ x: number; z: number }>;
   won?: boolean;
+  // PR #13 stub 字段(Snake prep,spec §2 / §8.1)——Sam/David 各 pull 后填充真实值
+  /** 静态地形 AABB(书架+桌子+柱子),每局不变。Sam minimap 复用;David scene 注入。 */
+  terrain?: Array<{ x: number; z: number; w: number; d: number; kind: 'shelf' | 'table' | 'column' }>;
+  /** 近空桩标志(≤1.5m)。Sam gtaPrompt 据此显隐左上 prompt;David main.ts 每帧算距离注入。 */
+  nearOutlet?: boolean;
 }
 
 export type AppAction =
@@ -37,6 +42,9 @@ export function createSharedStateFacade(
       outlets: outlets.map(o => ({ x: o.x, z: o.z, occupied: o.occupied ?? false })),
       npcs: [],
       path: undefined,
+      // PR #13 stub(Snake prep,spec §8.1)—— David main.ts wrap 会覆盖为真实值
+      terrain: [],
+      nearOutlet: false,
     }),
   };
 }
