@@ -42,6 +42,12 @@ export const CONFIG = {
   },
   npc: {
     count: 3,
+    walkSpeed: 2.2,        // PR #16 B:略慢于玩家 walkSpeed 3.0
+    idleMinSec: 2,
+    idleMaxSec: 5,
+    occupyMinSec: 8,
+    occupyMaxSec: 15,
+    arriveDist: 0.8,       // 到桩 0.8m 内 = occupying
   },
   hud: {
     promptRange: 1.5,       // 近空桩触发左上 GTA prompt 距离(米),spec §4.1
