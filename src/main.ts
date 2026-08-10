@@ -6,6 +6,7 @@ import { mountPhoneHud } from './ui/phoneHud';
 import { mountGtaPrompt } from './ui/gtaPrompt';
 import { mountPlayerStats } from './game/playerStats';
 import { CONFIG } from './game/config';
+import { mountAudio } from './platform/audio';
 import './style.css';
 
 // --- Renderer ---
@@ -49,11 +50,13 @@ let gameStarted = false;
 overlay.addEventListener('click', () => {
   overlay.style.display = 'none';
   gameStarted = true;
+  audio.startBGM(); // PR #16:首次用户点击启动 BGM(AudioContext 手势内 resume)
 });
 
 // PR #12 §2.5.2/§2.5.5:胜利 / 失败状态(共态,影响 main loop 早退 + getSharedState wrap)
 let gameWon = false;      // 走近空桩按 E → true
 let gameOver = false;     // battery=0 → true
+let lowLatch = false;     // PR #16:低电警报只触发一次(restart 重置)
 
 // --- Runtime + PlayerStats(PR #10 — 必须先于 controller 实例化,因 controller 需读 dash mult)
 const runtime = {
@@ -90,15 +93,19 @@ function getSharedState() {
 }
 
 // --- Mount phone HUD stub(Sam 在 PR #9 替换 mountPhoneHud 实现,调用点不动)---
+const audio = mountAudio(); // PR #16 §4.2:Roy 加(位于 mountPhoneHud 之前)
 mountPhoneHud({
   getSharedState,
   onAppAction: (action) => {
     if (action.kind === 'toggle-app') {
       const key = action.app === 'map' ? 'MAP' : action.app === 'radar' ? 'RADAR' : 'QUERY';
       runtime.appOpen[key] = !runtime.appOpen[key];
+      audio.playAppToggle(action.app); // PR #16:切 app "咔" SFX
     } else if (action.kind === 'restart') {
       gameWon = false;
       gameOver = false;
+      lowLatch = false; // PR #16:低电警报 latch 复位
+      audio.startBGM(); // PR #16:重开一局,恢复 BGM(若已停)
       playerStats.reset();
       player.position.set(0, 0, 8.5);
       // PR #13 #5:新 seed,每局 NPC 占位分布不同(QTE 方案已砍,无 state 需重置)
@@ -120,6 +127,7 @@ window.addEventListener('keydown', (e) => {
   );
   if (near) {
     gameWon = true;
+    audio.playWin(); // PR #16:充电成功上升音阶
     console.log('[win] 充上电了');
   }
 });
@@ -165,7 +173,14 @@ function animate() {
     playerStats.step(dt, input);
     controller.update(dt);
     // §2.5.5 game over 检测:battery=0 且未胜 → gameOver=true
-    if (runtime.battery <= 0) gameOver = true;
+    if (runtime.battery <= 0) {
+      gameOver = true;
+      audio.playLose(); // PR #16:没电下降 SFX
+      audio.stopBGM(); // PR #16:失败后 BGM 停
+    } else if (runtime.battery <= 0.05 && !lowLatch) {
+      lowLatch = true;
+      audio.playLowBattery(); // PR #16:低电警报(2s 间歇哔,stopBGM 时停)
+    }
   }
   update(dt);
   renderer.render(scene, camera);
