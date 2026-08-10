@@ -216,10 +216,12 @@ export interface LibraryScene {
   rebuildTableZone: (params: DebugParams) => void;
   /** Debug overlay 用:显示/隐藏全部 collider 的线框。 */
   setColliderHelpersVisible: (visible: boolean) => void;
-  /** PR #12 §2.5/§2.5.4 randomize NPC 占位 — 重置全部 occupied,seeded RNG 选 count 个标红,刷新 mesh 颜色 + NPC 占位球。 */
+  /** PR #12 §2.5/§2.5.4 randomize NPC 占位 — 重置全部 occupied,seeded RNG 选 count 个标红,刷新 mesh 颜色 + NPC 坐姿猫。 */
   randomizeOccupiedOutlets: (count?: number, seed?: number) => void;
   /** PR #12 §2.7 单桩切 occupied 状态 + 同步 mesh material 红绿(扩展点,本 PR 仅内部用)。 */
   setOutletOccupied: (index: number, occupied: boolean) => void;
+  /** PR #13 新增:静态地形 AABB 列表(书架+四人桌+柱子),供 SharedState/minimap 画地形。rebuildTableZone 不影响(引用稳定)。 */
+  terrain: Array<{ x: number; z: number; w: number; d: number; kind: 'shelf' | 'table' | 'column' }>;
 }
 
 /** 占位椅:座面 + 靠背(靠背在远离桌子一侧,axis=椅子朝向所在轴)。 */
@@ -396,6 +398,39 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   header.position.set(15.9, 3.2, -3);
   scene.add(header);
 
+  // PR #13 #7 天花板:米黄,顶到墙高 3.2m(朝下)。debug overlay 加 top-down 相机时需 toggle visible(留 PR #14)。
+  const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xe6d5a8, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_W, FLOOR_D), ceilingMat);
+  ceiling.rotation.x = Math.PI / 2;  // 朝下
+  ceiling.position.y = WALL_H;       // 顶到墙高
+  scene.add(ceiling);
+
+  // PR #13 #7 北/南/西三面墙各 2 个发光窗(复用东墙 pattern:发光 plane + 竖梃 3 根)。
+  // 竖梃沿墙轴方向偏移:rotY=0(N/S 墙,窗宽沿 x)→ x 偏移;rotY=π/2(西墙,窗宽沿 z)→ z 偏移。
+  // 发光面用 DoubleSide —— 南墙窗 rotY=0 面朝外,单面材质从室内不可见。
+  const windowGlowMat = new THREE.MeshBasicMaterial({ color: 0xeaf4ff, side: THREE.DoubleSide });
+  const windowConfigs: Array<{ pos: [number, number, number]; rotY: number; w: number; h: number }> = [
+    { pos: [-3, 1.9, -11.9], rotY: 0, w: 4, h: 2 },      // 北 1
+    { pos: [3, 1.9, -11.9], rotY: 0, w: 4, h: 2 },       // 北 2
+    { pos: [-3, 1.9, 11.9], rotY: 0, w: 4, h: 2 },       // 南 1
+    { pos: [3, 1.9, 11.9], rotY: 0, w: 4, h: 2 },        // 南 2
+    { pos: [-15.9, 1.9, -3], rotY: Math.PI / 2, w: 4, h: 2 },  // 西 1
+    { pos: [-15.9, 1.9, 3], rotY: Math.PI / 2, w: 4, h: 2 },   // 西 2
+  ];
+  for (const cfg of windowConfigs) {
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(cfg.w, cfg.h), windowGlowMat);
+    glow.position.set(...cfg.pos);
+    glow.rotation.y = cfg.rotY;
+    scene.add(glow);
+    for (let i = -1; i <= 1; i++) {
+      const localOffset = i * (cfg.w / 3);
+      const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, cfg.h, 0.1), mullionMat);
+      if (cfg.rotY === 0) mullion.position.set(cfg.pos[0] + localOffset, cfg.pos[1], cfg.pos[2]);
+      else mullion.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2] + localOffset);
+      scene.add(mullion);
+    }
+  }
+
   // ── 静态 placements:书架/柱/端板盒/壁插/窗边桌(只构一次)──────────
   const { placements: staticPlacements, poweredColumns, endPanelBoxes } = buildStaticPlacements();
 
@@ -482,9 +517,12 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     metalness: 0,
   });
 
-  // 每个桩对应一个 mesh(柱电位 + 端板绿点 + 桌电位);壁插无 mesh 视图(常亮)
-  // 与 outletPositions 同序;壁插槽位为 undefined 表示"无切换 mesh"。
-  const outletMeshes: (THREE.Mesh | undefined)[] = [];
+  // PR #13 #4:每个 outlet 对应一个 mesh 数组(柱电位/端板绿点 = 单元素,桌电位 = 双元素,壁插无 mesh = 空数组)。
+  // 与 outletPositions 同序;setOutletOccupied / randomizeOccupiedOutlets 遍历 group 全切色。
+  const outletMeshGroups: THREE.Mesh[][] = [];
+  // PR #13 #4:table-level outlet 的 4 个座位 key(非桌 outlet 为 null)。
+  // occupied 由 freeSeats 推导:4 椅都坐猫 = 占(红),1-3 空 = 空(绿)。
+  const tableOutletSeatKeys: (string[] | null)[] = [];
   const columnOutletMeshes: THREE.Mesh[] = [];
   const endDotMeshes: THREE.Mesh[] = [];
 
@@ -512,10 +550,9 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     endDotMeshes.push(dot);
   }
 
-  // PR #12 §2.5.4 NPC 占位球 — 橙色 sphere(0.35 半径),放在选中桩的 (x, 0.4, z+0.6)
-  const npcMat = new THREE.MeshStandardMaterial({ color: 0xff6b3a, roughness: 0.7, metalness: 0 });
-  const npcGeo = new THREE.SphereGeometry(0.35, 12, 8);
-  const npcMeshes: THREE.Mesh[] = [];
+  // PR #12 §2.5.4 / PR #13 #3:NPC 占位坐姿猫(createSeatedCat,随机毛色+朝向),
+  // 放在选中桩的 (x, 0.45, z+0.6)。换 GLB 时只改 createSeatedCat 函数体。
+  const npcMeshes: THREE.Group[] = [];
   const NPC_SEED = 1;
 
   // ── 窗边 readingTable 座位:静态(2 人桌,西侧椅)──
@@ -623,24 +660,29 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     tableColliders.push(tableBox);
     pushTableHelper(tableBox);
 
-    // 桌面中线 2 电位
+    // PR #13 #4:桌面中线 2 电位 → 合并成 1 个 table-level outlet(中心 = 桌中心)。
+    // 视觉 2 个 mesh 共享同一 occupied 状态;4 座位都坐猫 = 占(红),1-3 空 = 空(绿)。
     const tableH = dim.h;
+    outletPositions.push({ x: p.x, z: p.z, occupied: false });
+    const outletGroup: THREE.Mesh[] = [];
     for (const ox of STUDY_OUTLET_OFFSETS) {
       const sq = new THREE.Mesh(studyOutletGeo, outletMatEmpty);
       sq.position.set(p.x + ox, tableH + 0.011, p.z);
       tableZone.add(sq);
-      // 与 outletPositions 同序:本循环是 buildOneStudyTable 一对一,
-      // 同时 push mesh + pos;同 rebuildTableZone 对齐(rebuild 后 column/endWall 先推)
-      outletPositions.push({ x: p.x + ox, z: p.z, occupied: false });
-      outletMeshes.push(sq);
+      outletGroup.push(sq);
     }
+    outletMeshGroups.push(outletGroup);
+    const outletIdx = outletPositions.length - 1;
 
     // 4 椅 + 4 座位猫
     const ci = STUDY_COL_XS.indexOf(p.x);
     const ri = rows.indexOf(p.z);
     let si = 0;
+    const seatKeys: string[] = [];
     for (const side of [-1, 1] as const) {
       for (const xo of SEAT_OFFSETS) {
+        const key = `${ci},${ri},${si}`;
+        seatKeys.push(key);
         const sx = p.x + xo;
         const sz = p.z + side * currentParams.seatSideDist;
         const chair = createChair(side, 'z');
@@ -652,13 +694,20 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
         );
         tableColliders.push(cb);
         pushTableHelper(cb);
-        if (!freeSeats.has(`${ci},${ri},${si}`)) {
+        if (!freeSeats.has(key)) {
           const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side === 1 ? 0 : Math.PI);
           cat.position.set(sx, 0.45, sz);
           tableZone.add(cat);
         }
         si++;
       }
+    }
+    // 4 座位都坐猫 = 桌桩占(红);任意空椅 = 空(绿)
+    const tableOccupied = seatKeys.every(k => !freeSeats.has(k));
+    outletPositions[outletIdx].occupied = tableOccupied;
+    tableOutletSeatKeys.push(seatKeys);
+    if (tableOccupied) {
+      for (const m of outletGroup) m.material = outletMatOccupied;
     }
   }
 
@@ -687,33 +736,40 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
 
     const rows = studyRowZs(p.rowSpacing);
     const tablePlacements = buildStudyTablePlacements(p.rowSpacing);
+
+    // 重算 outlets(原地刷新,facade 持同一引用)+ 同步 outletMeshGroups / tableOutletSeatKeys。
+    // 顺序:column/endPanel/壁插 先推,studyTable 由 buildOneStudyTable 接着推(保持同序)。
+    // 注意:清空必须先于桌构建循环 —— 否则桌 outlet 会被 length=0 清掉(PR #12 遗留,PR #13 #4 修复)。
+    outletPositions.length = 0;
+    outletMeshGroups.length = 0;
+    tableOutletSeatKeys.length = 0;
+    let ciMesh = 0;
+    for (const c of poweredColumns) {
+      outletPositions.push({ x: c.x + c.face * (MODEL_DIMS.column.w / 2), z: c.z, occupied: false });
+      outletMeshGroups.push([columnOutletMeshes[ciMesh++]]);
+      tableOutletSeatKeys.push(null);
+    }
+    let eiMesh = 0;
+    for (const b of endPanelBoxes) {
+      outletPositions.push({ x: b.x, z: b.z - MODEL_DIMS.column.d / 2, occupied: false });
+      outletMeshGroups.push([endDotMeshes[eiMesh++]]);
+      tableOutletSeatKeys.push(null);
+    }
+    for (const p of staticPlacements) {
+      if (p.kind === 'wallSocket') {
+        outletPositions.push({ x: p.x, z: p.z, occupied: false });
+        // 壁插常亮(spec §6.2):无切换 mesh 视图(空数组)
+        outletMeshGroups.push([]);
+        tableOutletSeatKeys.push(null);
+      }
+    }
+    // study table outlets 由 buildOneStudyTable 内 push(在 column/endPanel/壁插 之后)
+
     for (const tp of tablePlacements) buildOneStudyTable(tp, rows);
 
     // 合并到 controller 持引用的 colliders
     colliders.length = 0;
     colliders.push(...staticColliders, ...tableColliders);
-
-    // 重算 outlets(原地刷新,facade 持同一引用)+ 同步 outletMeshes
-    outletPositions.length = 0;
-    outletMeshes.length = 0;
-    let ciMesh = 0;
-    for (const c of poweredColumns) {
-      outletPositions.push({ x: c.x + c.face * (MODEL_DIMS.column.w / 2), z: c.z, occupied: false });
-      outletMeshes.push(columnOutletMeshes[ciMesh++]);
-    }
-    let eiMesh = 0;
-    for (const b of endPanelBoxes) {
-      outletPositions.push({ x: b.x, z: b.z - MODEL_DIMS.column.d / 2, occupied: false });
-      outletMeshes.push(endDotMeshes[eiMesh++]);
-    }
-    for (const p of staticPlacements) {
-      if (p.kind === 'wallSocket') {
-        outletPositions.push({ x: p.x, z: p.z, occupied: false });
-        // 壁插常亮(spec §6.2):无切换 mesh 视图
-        outletMeshes.push(undefined);
-      }
-    }
-    // study table sq meshes 由 buildOneStudyTable 内 push(保持与 outletPositions 同序)
 
     console.log(`[debug] rebuild table zone: rowSpacing=${p.rowSpacing}, seatSideDist=${p.seatSideDist}, tables=${tablePlacements.length}, outlets=${outletPositions.length}`);
   }
@@ -753,34 +809,46 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     for (const h of tableHelpers) h.visible = visible;
   }
 
-  /** PR #12 §2.7 单桩切 occupied + 同步 mesh material。 */
+  /** PR #12 §2.7 / PR #13 #4:单桩切 occupied + 遍历 mesh group 全切色(桌桩 2 个 mesh 同步)。 */
   function setOutletOccupied(index: number, occupied: boolean): void {
     if (index < 0 || index >= outletPositions.length) return;
     outletPositions[index].occupied = occupied;
-    const mesh = outletMeshes[index];
-    if (mesh) mesh.material = occupied ? outletMatOccupied : outletMatEmpty;
+    for (const m of outletMeshGroups[index]) {
+      m.material = occupied ? outletMatOccupied : outletMatEmpty;
+    }
   }
 
   /**
-   * PR #12 §2.5/§2.5.4 seeded RNG NPC 占位。
-   * 重置全部 outlets.occupied=false + 回绿;用 mulberry32 + Fisher-Yates
-   * 从 mesh-backed 桩全集里挑 count 个标红(occupied=true);清旧 NPC 占位球,建新橙色球
-   * 放在 (o.x, 0.4, o.z + 0.6)。壁插(无切换 mesh)排除在外 — 与 freeSeat 同源 RNG。
+   * PR #12 §2.5/§2.5.4 / PR #13 #3+#4 seeded RNG NPC 占位。
+   * 重置全部 outlets.occupied=false + 回绿;table-level outlet 的 occupied 由 4 座位推导
+   * (4 椅都坐猫 = 红,1-3 空 = 绿,不参与随机);再从非桌 mesh-backed 桩里用 mulberry32 +
+   * Fisher-Yates 挑 count 个标红;清旧 NPC 猫,新坐姿猫放 (o.x, 0.45, o.z + 0.6)。
+   * 壁插(无切换 mesh)排除在外。
    */
   function randomizeOccupiedOutlets(count: number = CONFIG.npc.count, seed: number = NPC_SEED): void {
-    // 重置 occupied + 回绿 + 清旧 NPC 球
+    // 重置 occupied + 回绿 + 清旧 NPC 猫
     for (let i = 0; i < outletPositions.length; i++) {
       outletPositions[i].occupied = false;
-      const mesh = outletMeshes[i];
-      if (mesh) mesh.material = outletMatEmpty;
+      for (const m of outletMeshGroups[i]) m.material = outletMatEmpty;
+    }
+    // table-level outlet:occupied 由 freeSeats 推导(4 椅都坐猫 = 占)
+    for (let i = 0; i < outletPositions.length; i++) {
+      const keys = tableOutletSeatKeys[i];
+      if (keys) {
+        const occ = keys.every(k => !freeSeats.has(k));
+        outletPositions[i].occupied = occ;
+        if (occ) {
+          for (const m of outletMeshGroups[i]) m.material = outletMatOccupied;
+        }
+      }
     }
     npcMeshes.forEach(m => scene.remove(m));
     npcMeshes.length = 0;
 
-    // 仅 mesh-backed 桩可被 NPC 占位(排除壁插)
+    // 仅非桌 mesh-backed 桩可被随机占位(排除壁插无 mesh + table 座位推导)
     const meshBacked: number[] = [];
-    for (let i = 0; i < outletMeshes.length; i++) {
-      if (outletMeshes[i]) meshBacked.push(i);
+    for (let i = 0; i < outletMeshGroups.length; i++) {
+      if (outletMeshGroups[i].length > 0 && !tableOutletSeatKeys[i]) meshBacked.push(i);
     }
     if (meshBacked.length === 0) return;
 
@@ -794,17 +862,35 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     for (let k = 0; k < chosenN; k++) {
       const idx = meshBacked[k];
       outletPositions[idx].occupied = true;
-      const mesh = outletMeshes[idx];
-      if (mesh) mesh.material = outletMatOccupied;
+      for (const m of outletMeshGroups[idx]) m.material = outletMatOccupied;
       const o = outletPositions[idx];
-      const npc = new THREE.Mesh(npcGeo, npcMat);
-      npc.position.set(o.x, 0.4, o.z + 0.6); // 桩旁偏前
+      const npc = createSeatedCat(FUR_COLORS[Math.floor(rng() * FUR_COLORS.length)], rng() * Math.PI * 2);
+      npc.position.set(o.x, 0.45, o.z + 0.6); // 桩旁偏前
       scene.add(npc);
       npcMeshes.push(npc);
     }
   }
   // 启动调用一次,确保每局可复现
   randomizeOccupiedOutlets();
+
+  // PR #13 暴露 terrain:静态地形 AABB(书架 + 柱子 + 四人桌),供 minimap 画地形(迷宫感)。
+  // 静态数组,rebuildTableZone 不改 studyTable 数量与中心位置 → 引用稳定(debug 调 rowSpacing
+  // 时 terrain 与视觉可能脱节,jam 期仅开发用,留 PR #14 backlog)。readingTable 本 PR 不进 terrain。
+  const terrain: LibraryScene['terrain'] = [];
+  for (const p of staticPlacements) {
+    if (p.kind === 'bookshelf') {
+      const dim = MODEL_DIMS.bookshelf;
+      const rotated = Math.abs(Math.abs(p.rotY ?? 0) - Math.PI / 2) < 0.01;  // 与 collider 同规则
+      terrain.push({ x: p.x, z: p.z, w: rotated ? dim.d : dim.w, d: rotated ? dim.w : dim.d, kind: 'shelf' });
+    } else if (p.kind === 'column') {
+      const dim = MODEL_DIMS.column;
+      terrain.push({ x: p.x, z: p.z, w: dim.w, d: dim.d, kind: 'column' });
+    }
+  }
+  for (const tp of buildStudyTablePlacements(DEFAULT_DEBUG_PARAMS.rowSpacing)) {
+    const dim = MODEL_DIMS.studyTable;
+    terrain.push({ x: tp.x, z: tp.z, w: dim.w, d: dim.d, kind: 'table' });
+  }
 
   let t = 0;
 
@@ -824,5 +910,6 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     setColliderHelpersVisible,
     randomizeOccupiedOutlets,
     setOutletOccupied,
+    terrain,
   };
 }
