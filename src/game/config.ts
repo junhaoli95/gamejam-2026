@@ -1,3 +1,8 @@
+// PR #13 #2:起始电量 10%(1% 电主题)+ 方案 B —— baseDrain 跟 startPercent 缩放,
+// 让 10% 仍玩满 totalGameTimeS(180s),百分比只是显示数字。playtest 调 START_PERCENT。
+const START_PERCENT = 0.10;
+const TOTAL_GAME_TIME_S = 180;
+
 export const CONFIG = {
   world: { w: 32, d: 24, cellSize: 0.4 },
   player: {
@@ -26,9 +31,9 @@ export const CONFIG = {
     dashMult: 3,
   },
   battery: {
-    startPercent: 1.0,
-    baseDrain: 1.0 / 180,
-    totalGameTimeS: 180,
+    startPercent: START_PERCENT,
+    baseDrain: START_PERCENT / TOTAL_GAME_TIME_S,  // 方案 B:满电续航 = totalGameTimeS 不变(spec §4.1 / §10.1)
+    totalGameTimeS: TOTAL_GAME_TIME_S,
     appMult: {
       RADAR: 3,
       MAP: 2,
@@ -36,6 +41,10 @@ export const CONFIG = {
     },
   },
   npc: {
-    count: 5,
+    count: 3,
+  },
+  hud: {
+    promptRange: 1.5,       // 近空桩触发左上 GTA prompt 距离(米),spec §4.1
+    objectiveText: '电量耗尽之前找到充电位置',  // 中下常驻任务条文案
   },
 } as const;
