@@ -36,6 +36,10 @@ const CSS = `
   display: inline-block;
   opacity: 1;
 }
+.gta-prompt.fading {
+  opacity: 0.2;
+  transition: opacity 80ms ease-out;
+}
 .gta-prompt-icon {
   color: #ffd24a;
   font-size: 18px;
@@ -98,6 +102,8 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
 
   let promptShown = false;
   let hideTimer = 0;
+  let currentMode: 'objective' | 'charge' | null = null;
+  let fadeTimer = 0;
 
   function setPromptVisible(show: boolean): void {
     if (show === promptShown) return;
@@ -117,6 +123,22 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
     }
   }
 
+  /** GTA VC 风格内容切换:淡出 80ms → 换文字 → 淡入 120ms(有过渡感但不拖沓) */
+  function switchPromptMode(mode: 'objective' | 'charge'): void {
+    if (mode === currentMode) return;
+    currentMode = mode;
+    clearTimeout(fadeTimer);
+    // 淡出
+    promptEl.classList.add('fading');
+    fadeTimer = window.setTimeout(() => {
+      // 换内容
+      promptIconEl.textContent = mode === 'charge' ? '⚡' : '📍';
+      promptTextEl.textContent = mode === 'charge' ? '按 [E] 充电' : opts.objectiveText;
+      // 淡入
+      promptEl.classList.remove('fading');
+    }, 80);
+  }
+
   function loop(): void {
     requestAnimationFrame(loop);
     const state = opts.getSharedState();
@@ -124,9 +146,9 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
     const gameEnd = state.won === true || state.battery <= 0;
     setPromptVisible(!gameEnd);
     if (!gameEnd) {
-      const near = state.nearOutlet === true;
-      promptIconEl.textContent = near ? '⚡' : '📍';
-      promptTextEl.textContent = near ? '按 [E] 充电' : opts.objectiveText;
+      switchPromptMode(state.nearOutlet === true ? 'charge' : 'objective');
+    } else {
+      currentMode = null; // game end 后重置,下局开始时重新触发过渡
     }
     // stamina bar:fill width = pips × 100%;<0.2 变红(替代 phone HUD 内 pip bar)
     const pips = Math.max(0, Math.min(1, state.pips));
