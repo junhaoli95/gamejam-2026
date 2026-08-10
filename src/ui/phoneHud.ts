@@ -349,16 +349,6 @@ function injectStylesOnce(): void {
   document.head.appendChild(el);
 }
 
-function formatMSss(totalSecRaw: number): string {
-  // master §3.4 — M:SS is the primary battery display unit.
-  // totalSecRaw comes from battery * CONFIG.battery.totalGameTimeS.
-  // Negative/NaN guard for stub transitions; clamp to 0:00 floor.
-  const sec = Math.max(0, Math.round(totalSecRaw));
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
 function drawRadar(
   canvas: HTMLCanvasElement,
   state: SharedState,
@@ -761,9 +751,9 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     battFillEl.style.transform = `scaleY(${fillScale})`;
     battFillEl.classList.toggle('low', battery <= 0.10);
 
-    // M:SS primary + % auxiliary (§3.4 / §10 decision 10)
-    const totalSecRaw = battery * CONFIG.battery.totalGameTimeS;
-    battTimeEl.textContent = formatMSss(totalSecRaw);
+    // 秒数 primary + % auxiliary(方案 B:剩余秒 = battery / baseDrain = battery × totalGameTimeS / startPercent)
+    const totalSecRaw = battery * CONFIG.battery.totalGameTimeS / CONFIG.battery.startPercent;
+    battTimeEl.textContent = `${Math.max(0, Math.round(totalSecRaw))}s`;
     battPctEl.textContent = `${Math.round(battery * 100)}%`;
 
     // thresholds: ≤10% banner show; ≤3% +blink; ≤0 blackout.
