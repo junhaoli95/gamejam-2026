@@ -83,9 +83,15 @@ interface OpponentController {
     - **prompt 内必须含 build 验证策略**:明确写"每 N commit 合跑一次 build，test 只在最后一次完整跑"，避免 subagent 每 commit 各跑一次 build+test 烧 token
     - **prompt 内必须含预算上限**:"如果连续 build 失败 3 次或 test 失败 3 次，立刻停下，返回错误原因给我，不要陷入循环重试"
     - **subagent 是黑盒**:主 agent 看不到中间过程、不能实时停、失败后没 checkpoint 续传;只能等它返回最终消息;高风险任务必须拆小 + 给任务前 dry-run 才用 subagent
-    - **并行多 subagent 判据**:任务间文件交集 = 0 才并行;> 0 必须串行（否则 git merge 冲突打架）
-    - **多模态验证**:主 agent 不能读图片时,可 dispatch 多模态 subagent（如 Claude / GPT-4V）做 UI 截图 review。日常 DOM 验证优先用 `chrome-devtools_evaluate_script` 读 class/style/textContent 替代截图，多数 review 不需图片
-    - **session 复用优先**:一个功能彻底开发完再删 worktree，避免来回重建 + git config 身份重配;`git worktree remove` 是轻量操作（共享 .git 无需重下载）但 opencode session 会随之失效（上下文丢失）
+    - **并行多 subagent 判据**:任务间文件交集 = 0 才并行;> 0 必须串行(否则 git merge 冲突打架)
+    - **多 agent 共改同文件(main.ts 等)的冲突预防(2026-08-10 加,PR #16 教训)**:
+      - Snake prep commit 时**明确划分每个 agent 在共享文件里的改动区域**(行号区间/锚点注释),每个 agent 只改自己区域
+      - **agent prompt 必须写明"只在你指定的区域改,不要越界到其他 agent 的区域"**
+      - **若两 agent 改相邻区域有撞 hunk 风险**:第一个 push 的 PR 先 merge,后续 agent **开工前必须 `git pull origin main` rebase 到最新基线**,不要基于旧 main 开工
+      - **不要等 3 个 PR 都开完才发现冲突** — Snake 整合 review 在临时 worktree 模拟 merge 前,先单独 review 每个 PR 改的行号区间是否重叠,重叠就提前预警
+      - **如果冲突发生了**:让原 agent 在自己 worktree 里 `git rebase origin/main` 自己 resolve + `git push --force-with-lease`,**不要让 Snake 在临时 worktree 替 agent resolve 再强推**(这会绕过 agent 的 обучения,且 commit author 变成 Snake)
+    - **多模态验证**:主 agent 不能读图片时,可 dispatch 多模态 subagent(如 Claude / GPT-4V)做 UI 截图 review。日常 DOM 验证优先用 `chrome-devtools_evaluate_script` 读 class/style/textContent 替代截图,多数 review 不需图片
+    - **session 复用优先**:一个功能彻底开发完再删 worktree,避免来回重建 + git config 身份重配;`git worktree remove` 是轻量操作(共享 .git 无需重下载)但 opencode session 会随之失效(上下文丢失)
 
 ## AI 协作偏好
 
