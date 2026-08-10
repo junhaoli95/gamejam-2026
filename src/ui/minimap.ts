@@ -100,7 +100,27 @@ export function createMinimap(
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, W, H);
 
-    // 4) Zone labels (static world-space anchors).
+    // 4) Terrain rectangles (PR #13 §3.2 — 书架/桌子/柱子静态 AABB,迷宫感)。
+    //    向后兼容:state.terrain 为 undefined 或空数组时整段跳过,维持原 blip-only 渲染。
+    if (state.terrain && state.terrain.length > 0) {
+      for (const t of state.terrain) {
+        const sx = toX(t.x - t.w / 2);
+        const sy = toY(t.z - t.d / 2);
+        const sw = t.w * scale;
+        const sh = t.d * scale;
+        const color = t.kind === 'shelf' ? '#3a4a52'
+                    : t.kind === 'table' ? '#5a4a3a'
+                    : '#6a6a6a'; // column
+        ctx.fillStyle = color;
+        ctx.fillRect(sx, sy, sw, sh);
+        // 细描边强化"墙"感
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(sx, sy, sw, sh);
+      }
+    }
+
+    // 5) Zone labels (static world-space anchors).
     ctx.font = '11px sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.34)';
     ctx.textAlign = 'center';
@@ -109,7 +129,7 @@ export function createMinimap(
       ctx.fillText(z.text, toX(z.x), toY(z.z));
     }
 
-    // 5) Outlet blips (color from caller — green for MAP, state-colored for
+    // 6) Outlet blips (color from caller — green for MAP, state-colored for
     //    QUERY).  Soft glow + 3×3 square, same shape language as Layer 1.
     ctx.shadowBlur = 5;
     for (const o of state.outlets) {
@@ -119,7 +139,7 @@ export function createMinimap(
     }
     ctx.shadowBlur = 0;
 
-    // 6) North indicator (fixed, top-center of canvas, screen-space).
+    // 7) North indicator (fixed, top-center of canvas, screen-space).
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
@@ -132,7 +152,7 @@ export function createMinimap(
     ctx.lineTo(W / 2, 22);
     ctx.stroke();
 
-    // 7) Player triangle arrow rotated by yaw (north-up).
+    // 8) Player triangle arrow rotated by yaw (north-up).
     //    Canvas Y axis points DOWN, so visually a `ctx.rotate(+θ)` produces a
     //    canvas-CW rotation (math CCW in standard y-up coords).  Layer 1's
     //    convention is `forward = (-sinY, -cosY)` in world xz; at yaw=π/2 the
