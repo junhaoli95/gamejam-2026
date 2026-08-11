@@ -21,7 +21,8 @@ export const CONFIG = {
     up: 1.35,
     collidePad: 0.25,
     collideSteps: 8,
-    dampLambda: 12,
+    dampLambda: 12,       // 方向阻尼(快跟转向);camera tune 拆分后只管方向
+    dampDistLambda: 5,    // 距离阻尼(慢跟近墙 clip 恢复,4-6 手感区);camera tune 新增
     minDist: 1.4,
   },
   dash: {
