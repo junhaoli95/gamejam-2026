@@ -101,4 +101,28 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     expect(e.x).toBeGreaterThanOrEqual(-0.8 - 1e-6);
     expect(e.z).toBeCloseTo(0, 6);  // z 方向不受影响
   });
+
+  it('到达柱电位桩(桩在柱面)→ 切 occupying 时推出柱外', () => {
+    // 柱 x∈[-0.5,0.5] z∈[-1,1];桩在柱 x+ 面 (0.5, 0)
+    // 真实场景:NPC 从柱右侧远处走向柱面桩,最后到达时不能嵌柱
+    const column = { minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 };
+    const controller = createNpcController({
+      getOutletCount: () => 1,
+      getOutletPos: () => ({ x: 0.5, z: 0 }),  // 桩在柱 x+ 面
+      isOutletOccupied: () => false,
+      setOutletOccupied: () => {},
+      npcCount: 1,
+      cfg,
+      colliders: [column],
+    });
+    const e = controller.entities[0];
+    e.x = 5; e.z = 0;  // 柱右侧远处
+    controller.update(0.15);  // → moving,目标 0 号桩
+    // 移动足够久(每帧 resolveCollision 推 NPC 出柱,NPC 会卡在柱右边缘 x=0.8)
+    for (let i = 0; i < 500; i++) controller.update(0.1);
+    // 到不了桩(被柱挡,简化版无绕路),但绝不能在柱内
+    const insideColumn = e.x > -0.5 && e.x < 0.5 && e.z > -1 && e.z < 1;
+    expect(insideColumn).toBe(false);
+    expect(e.x).toBeGreaterThanOrEqual(0.8 - 1e-6);  // 柱右边缘外(radius 0.3)
+  });
 });

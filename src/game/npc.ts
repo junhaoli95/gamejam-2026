@@ -148,6 +148,8 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
         const dz = p.z - e.z;
         const dist = Math.hypot(dx, dz);
         if (dist <= cfg.arriveDist) {
+          // 到达:切 occupying + 推出柱外(柱电位桩在柱面,NPC 走到桩点 = 走进柱)
+          resolveCollision(e);
           e.state = 'occupying';
           e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);
           opts.setOutletOccupied(e.targetOutletIndex, true);
