@@ -70,6 +70,8 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
   const lookTarget = new THREE.Vector3();
   const tmp = new THREE.Vector3();
   const targetCamPos = new THREE.Vector3();
+  const camCurOff = new THREE.Vector3();      // camera tune:当前相机→head 偏移
+  const camTargetOff = new THREE.Vector3();   // camera tune:目标机位→head 偏移
 
   function cameraClipTest(point: THREE.Vector3): boolean {
     for (const b of colliders) {
@@ -82,6 +84,16 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
       }
     }
     return false;
+  }
+
+  // DEV-only:供 MCP / console 读相机状态(camera tune playtest 验证,prod 不含)
+  if (import.meta.env.DEV) {
+    Object.assign(window, {
+      __camDebug: {
+        getDist: () => camera.position.distanceTo(headPos),
+        getPos: () => camera.position.toArray(),
+      },
+    });
   }
 
   return {
@@ -144,17 +156,27 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
       targetCamPos.lerpVectors(headPos, desiredCam, t);
       targetCamPos.x = Math.min(hw, Math.max(-hw, targetCamPos.x));
       targetCamPos.z = Math.min(hd, Math.max(-hd, targetCamPos.z));
-      const dampFactor = 1 - Math.exp(-CONFIG.camera.dampLambda * dt);
-      camera.position.lerp(targetCamPos, dampFactor);
-
-      // backlog #001:damp 后再 clamp 相机距 head 下限,贴墙不近脸;
-      // PR #12 §2.9 NaN 防护:dist=0(相机正好叠在 headPos 上)时跳过 clamp,
-      // 否则 divide-by-0 → dir.multiplyScalar(Inf) → camera.position 写入 NaN。
-      const dir = tmp.subVectors(camera.position, headPos);
-      const dist = dir.length();
-      if (dist > 1e-6 && dist < CONFIG.camera.minDist) {
-        dir.multiplyScalar(CONFIG.camera.minDist / dist);
-        camera.position.copy(headPos).add(dir);
+      // ── spring-damp 拆分:方向快跟、距离慢跟(camera tune) ──
+      // 旧版整 vector lerp 把方向(yaw 转向)与距离(近墙 clip 恢复)绑在同一
+      // dampLambda 12 下:停转向瞬间全收敛 → "啪"地停;出墙瞬间距离 2.7m 突变 → 拉远感。
+      // 拆开:方向保持 dampLambda(12)快跟转向,距离用 dampDistLambda(5)慢慢拉近/拉远。
+      // minDist 从旧的"相机位置硬 snap"(无 lerp,与 clip 每帧打架 → 距离阶梯跳)改为
+      // 压在目标距离上(floor)→ 距离 lerp 自然平滑,贴墙不再抖动。
+      const curOff = camCurOff.subVectors(camera.position, headPos);
+      const curDist = curOff.length();
+      camTargetOff.subVectors(targetCamPos, headPos);
+      const targetDist = Math.max(camTargetOff.length(), CONFIG.camera.minDist);
+      camTargetOff.normalize();
+      if (curDist < 1e-6) {
+        // PR #12 §2.9 NaN 防护:dist=0(相机正好叠在 headPos 上)时直接到位,跳过 lerp
+        camera.position.copy(headPos).addScaledVector(camTargetOff, targetDist);
+      } else {
+        const dampDir = 1 - Math.exp(-CONFIG.camera.dampLambda * dt);
+        const dampDist = 1 - Math.exp(-CONFIG.camera.dampDistLambda * dt);
+        curOff.multiplyScalar(1 / curDist);
+        curOff.lerp(camTargetOff, dampDir).normalize();
+        const newDist = curDist + (targetDist - curDist) * dampDist;
+        camera.position.copy(headPos).addScaledVector(curOff, newDist);
       }
 
       lookTarget.set(0, 1.15, -2).applyEuler(euler).add(player.position);
