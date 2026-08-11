@@ -22,13 +22,32 @@ export function hasLineOfSight(
   const dx = ox - px;
   const dz = oz - pz;
   for (const b of boxes) {
-    // 桩贴在某 collider 表面(柱电位嵌柱面 / 端板盒贴柱)时,该 collider 不应算阻挡 —
-    // 玩家绕到柱子另一侧按 E 是合法的(桩就在柱子表面)。
-    const onSurface = (Math.abs(ox - b.minX) < 0.02 || Math.abs(ox - b.maxX) < 0.02) &&
-      oz > b.minZ - 0.02 && oz < b.maxZ + 0.02 ||
-      (Math.abs(oz - b.minZ) < 0.02 || Math.abs(oz - b.maxZ) < 0.02) &&
-      ox > b.minX - 0.02 && ox < b.maxX + 0.02;
-    if (onSurface) continue;
+    // 桩贴在某 collider 表面(柱电位嵌柱面 / 端板盒贴柱)。该 collider 是否算阻挡取决于
+    // 玩家在哪一侧:玩家在桩所在面的外侧(同侧)→ 看到桩面,不算挡;
+    // 玩家在柱对面/柱内 → 隔着柱,看不到桩面,算挡。
+    // 桩面判定:桩坐标贴近 collider 某面 ±0.02,且另轴在 collider 范围内。
+    let onSurfaceFace: 'x+' | 'x-' | 'z+' | 'z-' | null = null;
+    const nearXMin = Math.abs(ox - b.minX) < 0.02;
+    const nearXMax = Math.abs(ox - b.maxX) < 0.02;
+    const nearZMin = Math.abs(oz - b.minZ) < 0.02;
+    const nearZMax = Math.abs(oz - b.maxZ) < 0.02;
+    const inXRange = ox > b.minX - 0.02 && ox < b.maxX + 0.02;
+    const inZRange = oz > b.minZ - 0.02 && oz < b.maxZ + 0.02;
+    if (nearXMin && inZRange) onSurfaceFace = 'x-';
+    else if (nearXMax && inZRange) onSurfaceFace = 'x+';
+    else if (nearZMin && inXRange) onSurfaceFace = 'z-';
+    else if (nearZMax && inXRange) onSurfaceFace = 'z+';
+
+    if (onSurfaceFace) {
+      // 玩家必须在该面外侧(同侧)才不算挡;否则(对面/柱内)继续按普通 box 判定 → 挡
+      const playerOnOutside =
+        (onSurfaceFace === 'x+' && px >= b.maxX) ||
+        (onSurfaceFace === 'x-' && px <= b.minX) ||
+        (onSurfaceFace === 'z+' && pz >= b.maxZ) ||
+        (onSurfaceFace === 'z-' && pz <= b.minZ);
+      if (playerOnOutside) continue; // 同侧,看到桩面 → 不算挡
+      // 对面 → 落到下面普通判定(线段穿过 box → 挡)
+    }
     let tMin = 0;
     let tMax = 1;
     let hit = true;

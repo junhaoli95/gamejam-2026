@@ -35,11 +35,23 @@ describe('hasLineOfSight', () => {
     expect(hasLineOfSight(0, 0, 0, -10, [box])).toBe(false); // 从 (0,0) 到 (0,-10) 会穿过 z∈[-5,-4] x∈[-1,1]
   });
 
-  it('桩贴柱面(柱电位):目标在 collider 表面 → 不因该柱被挡', () => {
+  it('桩贴柱面(柱电位):玩家在桩同侧 → 有视线', () => {
     // 柱 x∈[-0.5,0.5] z∈[-1,1];桩在柱 x=0.5 表面(柱电位嵌柱面)
     const column: Aabb2D = { minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 };
-    // 玩家在柱左侧,桩在柱右侧表面 → 应仍有视线(桩就在柱面,绕过去按 E 合法)
-    expect(hasLineOfSight(-3, 0, 0.5, 0, [column])).toBe(true);
+    // 玩家在柱右侧(同侧,px > maxX),桩在柱右表面 → 看到桩面,有视线
+    expect(hasLineOfSight(2, 0, 0.5, 0, [column])).toBe(true);
+  });
+
+  it('桩贴柱面:玩家绕到柱对面(背面)→ 被挡,无视线', () => {
+    const column: Aabb2D = { minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 };
+    // 玩家在柱左侧(px < minX),桩在柱右表面 → 隔着柱,看不到桩 → 无视线
+    expect(hasLineOfSight(-3, 0, 0.5, 0, [column])).toBe(false);
+  });
+
+  it('桩贴柱面:玩家与桩同侧但贴近柱侧(柱旁)→ 有视线', () => {
+    const column: Aabb2D = { minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 };
+    // 桩在柱右表面,玩家从右侧靠近(px=1.0 > maxX)→ 有视线
+    expect(hasLineOfSight(1.0, 0, 0.5, 0, [column])).toBe(true);
   });
 
   it('桩不在表面但被挡:目标在 collider 后方 → 无视线', () => {
