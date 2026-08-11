@@ -22,6 +22,13 @@ export function hasLineOfSight(
   const dx = ox - px;
   const dz = oz - pz;
   for (const b of boxes) {
+    // 桩贴在某 collider 表面(柱电位嵌柱面 / 端板盒贴柱)时,该 collider 不应算阻挡 —
+    // 玩家绕到柱子另一侧按 E 是合法的(桩就在柱子表面)。
+    const onSurface = (Math.abs(ox - b.minX) < 0.02 || Math.abs(ox - b.maxX) < 0.02) &&
+      oz > b.minZ - 0.02 && oz < b.maxZ + 0.02 ||
+      (Math.abs(oz - b.minZ) < 0.02 || Math.abs(oz - b.maxZ) < 0.02) &&
+      ox > b.minX - 0.02 && ox < b.maxX + 0.02;
+    if (onSurface) continue;
     let tMin = 0;
     let tMax = 1;
     let hit = true;

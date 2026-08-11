@@ -34,4 +34,17 @@ describe('hasLineOfSight', () => {
     const box: Aabb2D = { minX: -1, minZ: -5, maxX: 1, maxZ: -4 }; // 离 x 轴很远
     expect(hasLineOfSight(0, 0, 0, -10, [box])).toBe(false); // 从 (0,0) 到 (0,-10) 会穿过 z∈[-5,-4] x∈[-1,1]
   });
+
+  it('桩贴柱面(柱电位):目标在 collider 表面 → 不因该柱被挡', () => {
+    // 柱 x∈[-0.5,0.5] z∈[-1,1];桩在柱 x=0.5 表面(柱电位嵌柱面)
+    const column: Aabb2D = { minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 };
+    // 玩家在柱左侧,桩在柱右侧表面 → 应仍有视线(桩就在柱面,绕过去按 E 合法)
+    expect(hasLineOfSight(-3, 0, 0.5, 0, [column])).toBe(true);
+  });
+
+  it('桩不在表面但被挡:目标在 collider 后方 → 无视线', () => {
+    const column: Aabb2D = { minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 };
+    // 桩在柱后方远处,不在表面 → 被挡
+    expect(hasLineOfSight(-3, 0, 3, 0, [column])).toBe(false);
+  });
 });
