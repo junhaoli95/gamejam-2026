@@ -28,3 +28,5 @@ gamejam-2026-*.zip
 
 # Visual companion brainstorming session
 .superpowers/
+
+src/scene/layouts-history/
