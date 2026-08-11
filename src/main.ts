@@ -90,14 +90,20 @@ const { getSharedState: getRawSharedState } = createSharedStateFacade(player, co
 /** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 won + PR #13 terrain/nearOutlet + PR #16 npcs。 */
 // PR #16 fix:nearOutlet 加视线检测 — 玩家→桩连线被 colliders 阻挡(隔墙)不算 near。
 // losBoxes 每次调用内联转换(rebuildTableZone 会改 colliders 内容,转换一次会 stale)。
+// 公共判定:nearOutlet(gtaPrompt 显示)与 E 键判胜必须用同一逻辑,否则脱节(提示没显示但能充电)。
+function findNearOutlet(outlets: Array<{ x: number; z: number; occupied: boolean }>, px: number, pz: number):
+  { x: number; z: number } | undefined {
+  const losBoxes = colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z }));
+  return outlets.find(o =>
+    !o.occupied && Math.hypot(o.x - px, o.z - pz) < CONFIG.hud.promptRange &&
+    hasLineOfSight(px, pz, o.x, o.z, losBoxes),  // PR #16 fix:隔墙不算
+  );
+}
+
 function getSharedState() {
   const s = getRawSharedState();
-  const losBoxes = colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z }));
   // PR #13 #9:近空桩标志(每帧算一次,供 gtaPrompt 显隐左上 prompt)
-  const nearOutlet = s.outlets.some(o =>
-    !o.occupied && Math.hypot(o.x - s.player.x, o.z - s.player.z) < CONFIG.hud.promptRange &&
-    hasLineOfSight(s.player.x, s.player.z, o.x, o.z, losBoxes),  // PR #16 fix:隔墙不算
-  );
+  const nearOutlet = !!findNearOutlet(s.outlets, s.player.x, s.player.z);
   return {
     ...s,
     battery: runtime.battery,
@@ -167,13 +173,11 @@ function syncNpcPositionsToMeshes(): void {
 }
 syncNpcPositionsToMeshes();
 
-// PR #12 §2.5.2:E 键近空桩(≤1.5m)判胜
+// PR #12 §2.5.2:E 键近空桩判胜 — PR #16 fix:与 nearOutlet 同一判定(距离+视线),避免提示脱节
 window.addEventListener('keydown', (e) => {
   if (e.code !== 'KeyE' || gameWon || gameOver || !gameStarted) return;
   const s = getSharedState();
-  const near = s.outlets.find(o =>
-    !o.occupied && Math.hypot(o.x - s.player.x, o.z - s.player.z) < 1.5,
-  );
+  const near = findNearOutlet(s.outlets, s.player.x, s.player.z);
   if (near) {
     gameWon = true;
     audio.playWin(); // PR #16:充电成功上升音阶
