@@ -79,4 +79,26 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     controller.reset(42);
     expect(e.idleTimer).toBe(t1);
   });
+
+  it('防穿墙:移动穿过 collider → 被推出到 AABB 外', () => {
+    // 墙:竖在 x∈[-0.5,0.5] z∈[-10,10],NPC 从 (-5,0) 走向 (5,0) 会被挡
+    const wall = { minX: -0.5, minZ: -10, maxX: 0.5, maxZ: 10 };
+    const controller = createNpcController({
+      getOutletCount: () => 1,
+      getOutletPos: () => ({ x: 5, z: 0 }),
+      isOutletOccupied: () => false,
+      setOutletOccupied: () => {},
+      npcCount: 1,
+      cfg,
+      colliders: [wall],
+    });
+    const e = controller.entities[0];
+    e.x = -5; e.z = 0;
+    controller.update(0.15);  // idle 完 → moving
+    // 走 20s,每秒 2m → 本该到 (5,0),但被墙挡在 x=-0.8(wall minX - radius 0.3)
+    for (let i = 0; i < 200; i++) controller.update(0.1);
+    expect(e.x).toBeLessThanOrEqual(-0.8 + 1e-6);  // 停在墙左侧
+    expect(e.x).toBeGreaterThanOrEqual(-0.8 - 1e-6);
+    expect(e.z).toBeCloseTo(0, 6);  // z 方向不受影响
+  });
 });

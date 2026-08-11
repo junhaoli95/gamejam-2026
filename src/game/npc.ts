@@ -61,7 +61,7 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
   /** NPC 半径(轻量常量,与 player radius 0.32 同量级,避免 NPC 太贴墙) */
   const NPC_RADIUS = 0.3;
 
-  /** 移动后碰撞推出:分轴检测 NPC 圆是否陷入某 AABB,沿该轴推出到贴面(与 player resolveAxis 同规则)。 */
+  /** 移动后碰撞推出:检测 NPC 圆是否陷入某 AABB,沿嵌入最浅的轴推出到贴面(与 player resolveAxis 同规则)。 */
   function resolveCollision(e: NpcEntity): void {
     const cols = opts.colliders;
     if (!cols || cols.length === 0) return;
@@ -69,11 +69,14 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       const insideX = e.x > b.minX - NPC_RADIUS && e.x < b.maxX + NPC_RADIUS;
       const insideZ = e.z > b.minZ - NPC_RADIUS && e.z < b.maxZ + NPC_RADIUS;
       if (!insideX || !insideZ) continue;
-      // 先沿 x 推,再沿 z 推(分轴,保证角落也解出)
-      if (e.x < (b.minX + b.maxX) / 2) e.x = b.minX - NPC_RADIUS;
-      else e.x = b.maxX + NPC_RADIUS;
-      if (e.z < (b.minZ + b.maxZ) / 2) e.z = b.minZ - NPC_RADIUS;
-      else e.z = b.maxZ + NPC_RADIUS;
+      // 算两个轴各自的嵌入深度,推嵌入浅的轴(最小推出,避免误推)
+      const overlapX = Math.min(e.x - (b.minX - NPC_RADIUS), (b.maxX + NPC_RADIUS) - e.x);
+      const overlapZ = Math.min(e.z - (b.minZ - NPC_RADIUS), (b.maxZ + NPC_RADIUS) - e.z);
+      if (overlapX <= overlapZ) {
+        e.x = e.x < (b.minX + b.maxX) / 2 ? b.minX - NPC_RADIUS : b.maxX + NPC_RADIUS;
+      } else {
+        e.z = e.z < (b.minZ + b.maxZ) / 2 ? b.minZ - NPC_RADIUS : b.maxZ + NPC_RADIUS;
+      }
     }
   }
 
