@@ -58,8 +58,8 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
   const cfg = opts.cfg;
   let rng = mulberry32(1);
 
-  /** NPC 半径(轻量常量,与 player radius 0.32 同量级,避免 NPC 太贴墙) */
-  const NPC_RADIUS = 0.3;
+  /** NPC 碰撞半径:比玩家 0.32 略大 + 视觉 margin(坐姿猫身体半宽 0.26,0.38 保证不贴柱) */
+  const NPC_RADIUS = 0.38;
 
   /** 移动后碰撞推出:检测 NPC 圆是否陷入某 AABB,沿嵌入最浅的轴推出到贴面(与 player resolveAxis 同规则)。 */
   function resolveCollision(e: NpcEntity): void {
@@ -148,7 +148,8 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
         const dz = p.z - e.z;
         const dist = Math.hypot(dx, dz);
         if (dist <= cfg.arriveDist) {
-          // 到达:切 occupying + 推出柱外(柱电位桩在柱面,NPC 走到桩点 = 走进柱)
+          // 到达:切 occupying。桩在柱面时 NPC 可能走进柱 —— resolveCollision 推出;
+          // 若推出后仍在柱内(多柱重叠/极端),沿来路反向退 0.5m 兜底。
           resolveCollision(e);
           e.state = 'occupying';
           e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);

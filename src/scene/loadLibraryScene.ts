@@ -867,7 +867,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       for (const m of outletMeshGroups[idx]) m.material = outletMatOccupied;
       const o = outletPositions[idx];
       const npc = createSeatedCat(FUR_COLORS[Math.floor(rng() * FUR_COLORS.length)], rng() * Math.PI * 2);
-      npc.position.set(o.x, 0.45, o.z + 0.6); // 桩旁偏前
+      // 桩旁偏前:端板盒/柱电位贴柱面,偏移 0.8(柱半宽 0.45 + 猫半宽 0.3 + margin)避免视觉贴柱
+      npc.position.set(o.x, 0.45, o.z + 0.8);
       scene.add(npc);
       npcMeshes.push(npc);
     }

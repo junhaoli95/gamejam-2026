@@ -198,6 +198,8 @@ if (import.meta.env.DEV) {
       getSharedState,
       set noDrain(v: boolean) { debugNoDrain = v; },
       get noDrain() { return debugNoDrain; },
+      // 调试:NPC 碰撞/视线用
+      get colliders() { return colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z })); },
     },
   });
 }

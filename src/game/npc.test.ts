@@ -95,10 +95,10 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     const e = controller.entities[0];
     e.x = -5; e.z = 0;
     controller.update(0.15);  // idle 完 → moving
-    // 走 20s,每秒 2m → 本该到 (5,0),但被墙挡在 x=-0.8(wall minX - radius 0.3)
+    // 走 20s,每秒 2m → 本该到 (5,0),但被墙挡在 x=-0.88(wall minX - radius 0.38)
     for (let i = 0; i < 200; i++) controller.update(0.1);
-    expect(e.x).toBeLessThanOrEqual(-0.8 + 1e-6);  // 停在墙左侧
-    expect(e.x).toBeGreaterThanOrEqual(-0.8 - 1e-6);
+    expect(e.x).toBeLessThanOrEqual(-0.88 + 1e-6);  // 停在墙左侧
+    expect(e.x).toBeGreaterThanOrEqual(-0.88 - 1e-6);
     expect(e.z).toBeCloseTo(0, 6);  // z 方向不受影响
   });
 
@@ -123,6 +123,6 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     // 到不了桩(被柱挡,简化版无绕路),但绝不能在柱内
     const insideColumn = e.x > -0.5 && e.x < 0.5 && e.z > -1 && e.z < 1;
     expect(insideColumn).toBe(false);
-    expect(e.x).toBeGreaterThanOrEqual(0.8 - 1e-6);  // 柱右边缘外(radius 0.3)
+    expect(e.x).toBeGreaterThanOrEqual(0.88 - 1e-6);  // 柱右边缘外(radius 0.38)
   });
 });
