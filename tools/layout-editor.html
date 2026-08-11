@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library ASCII Layout Editor</title>
+<style>
+:root { --cell: 24px; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #171a1f;
+  color: #d8dbe0;
+  user-select: none;
+}
+header {
+  position: fixed; top: 0; left: 0; right: 0; height: 46px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 14px;
+  background: #22272e;
+  border-bottom: 1px solid #3a4150;
+  z-index: 10;
+}
+header h1 { font-size: 14px; margin: 0; white-space: nowrap; }
+header .hint { font-size: 12px; color: #9aa3b2; }
+header .spacer { flex: 1; }
+#status { font-size: 12px; color: #8ec07c; white-space: nowrap; }
+#copyBtn {
+  background: #2e8b57; color: #fff; border: none; border-radius: 4px;
+  padding: 7px 14px; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+#copyBtn:hover { background: #379963; }
+#copyBtn:active { transform: translateY(1px); }
+
+main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-start; }
+
+#library {
+  width: 168px; flex-shrink: 0; background: #22272e;
+  border: 1px solid #3a4150; border-radius: 6px; padding: 10px;
+}
+#library h2 { font-size: 12px; margin: 0 0 8px; color: #9aa3b2; font-weight: 600; }
+.brush {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: #2a303a; border: 1px solid #3a4150; border-radius: 4px;
+  color: #d8dbe0; padding: 6px 8px; margin-bottom: 6px; cursor: pointer;
+  font-size: 12px; text-align: left;
+}
+.brush:hover { background: #333b47; }
+.brush.active { background: #2e3b4f; border-color: #4f8cc9; outline: 1px solid #4f8cc9; }
+.brush .char { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+.brush .key { margin-left: auto; font-size: 10px; color: #6b7480; }
+#countInfo { margin-top: 8px; font-size: 11px; color: #9aa3b2; line-height: 1.6; }
+#countInfo b { color: #d8dbe0; }
+
+#sizeBox {
+  margin-top: 10px; padding: 8px; background: #1d2228; border-radius: 4px;
+  font-size: 11px; color: #9aa3b2;
+}
+#sizeBox .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+#sizeBox label { width: 20px; }
+#sizeBox input {
+  width: 56px; background: #262b33; color: #d8dbe0; border: 1px solid #3a4150;
+  border-radius: 3px; padding: 3px 6px; font-size: 12px;
+}
+#sizeBox .unit { color: #6b7480; }
+
+#help {
+  margin-top: 10px; font-size: 11px; color: #6f7885; line-height: 1.7;
+  border-top: 1px solid #3a4150; padding-top: 8px;
+}
+
+#canvasWrap { flex-shrink: 0; }
+#canvas {
+  position: relative;
+  width: calc(var(--cell) * 32);
+  height: calc(var(--cell) * 24);
+  overflow: hidden;
+  background-color: #262b31;
+  background-image:
+    linear-gradient(to right, #333a44 1px, transparent 1px),
+    linear-gradient(to bottom, #333a44 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  border: 2px solid #4a525e;
+  cursor: crosshair;
+  touch-action: none;
+}
+.axis {
+  position: absolute; font-size: 9px; color: #7d8794;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none; z-index: 1;
+}
+.axis.x { top: 2px; }
+.axis.z { left: 2px; }
+.hoverCell {
+  position: absolute; width: var(--cell); height: var(--cell);
+  border: 1px solid #5f8fc9; background: rgba(79,140,201,0.12);
+  pointer-events: none; display: none; z-index: 1;
+}
+.el { position: absolute; cursor: grab; touch-action: none; }
+.el.dragging { cursor: grabbing; z-index: 5; }
+.el .lbl {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.el .body { position: absolute; inset: 0; border-radius: 3px; }
+.el .chair {
+  position: absolute; background: #d4b488; border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2);
+}
+.el.table .body { background: #b08c5e; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+.el.charge .body { background: #b08c5e; box-shadow: inset 0 0 0 2px #2ecc71; }
+.el.charge .dot {
+  position: absolute; width: 10px; height: 10px; background: #2ecc71;
+  border-radius: 50%; border: 1px solid #1d9d55; z-index: 1;
+}
+.el.column .body { background: #a8825c; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.3); }
+.el.shelf .body { background: #efeae0; box-shadow: inset 0 0 0 1px #8a8578; }
+.el.shelf .lbl { color: #6b6350; }
+.el.wall .body { background: #4a4f57; box-shadow: inset 0 0 0 1px #33373d; }
+.el.read .body { background: #a06e4a; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+.el.socket .body { background: #1f3320; box-shadow: inset 0 0 0 1px #3f5f41; }
+.el.socket .lbl { color: #6fae74; font-size: 9px; }
+.el.panel .body { background: #b8bcc0; box-shadow: inset 0 0 0 1px #7f848b; }
+.el.panel .lbl { color: #3d434b; }
+
+#out { flex: 1; min-width: 360px; }
+#out h2 { font-size: 12px; margin: 0 0 6px; color: #9aa3b2; font-weight: 600; }
+#previewBox {
+  background: #0f1114; border: 1px solid #3a4150; border-radius: 6px;
+  padding: 10px; overflow: auto; max-height: 620px;
+}
+#preview {
+  margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 1.35; color: #c9d3de; white-space: pre;
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Library ASCII Layout Editor</h1>
+  <span id="hint" class="hint"></span>
+  <div class="spacer"></div>
+  <span id="status">ready</span>
+  <button id="copyBtn">Copy ASCII</button>
+</header>
+
+<main>
+  <aside id="library">
+    <h2>元素库</h2>
+    <div id="brushes"></div>
+    <div id="countInfo"></div>
+    <div id="sizeBox">
+      <b>区域大小</b>
+      <div class="row"><label for="sizeW">W</label><input id="sizeW" type="number" min="8" max="128" step="2" value="32" aria-label="区域宽 W 米"><span class="unit">m</span></div>
+      <div class="row"><label for="sizeH">H</label><input id="sizeH" type="number" min="8" max="128" step="2" value="24" aria-label="区域高 H 米"><span class="unit">m</span></div>
+      <div style="color:#6b7480">修改后立即扩展画布(中心保持 0,0)</div>
+    </div>
+    <div id="help">
+      已加载当前游戏布局,在它基础上改<br>
+      左键按住拖动 = 批量放置(经过的每格放一个)<br>
+      左键按住已有元素拖动 = 移动(0.5m 吸附)<br>
+      Shift+拖动 B 切横/竖 · 右键删除<br>
+      橡皮: 左键拖 = 批量清除<br>
+      数字键 1~6 选笔刷 · ★ 限 1~2 个<br>
+      R=readingTable · S=wallSocket · E=端板盒
+    </div>
+  </aside>
+
+  <section id="canvasWrap">
+    <div id="canvas"></div>
+  </section>
+
+  <aside id="out">
+    <h2>ASCII 预览(实时)</h2>
+    <div id="previewBox"><pre id="preview"></pre></div>
+  </aside>
+</main>
+
+<script>
+'use strict';
+
+const CELL = 24;
+let ROOM_W = 32, ROOM_H = 24;
+
+const BRUSHES = [
+  { kind: 'T', char: 'T', name: '自习桌', bodyW: 1.8, bodyD: 1.2, chairW: 0.95, chairOff: 1.375, cls: 'table' },
+  { kind: '★', char: '★', name: '摸奖桌', bodyW: 1.8, bodyD: 1.2, chairW: 0.95, chairOff: 1.375, cls: 'charge' },
+  { kind: 'C', char: 'C', name: '柱', bodyW: 0.9, bodyD: 0.9, cls: 'column' },
+  { kind: 'B', char: 'B', name: '书架', bodyW: 3.0, bodyD: 0.6, rotatable: true, cls: 'shelf' },
+  { kind: '#', char: '#', name: '墙体', bodyW: 1.0, bodyD: 1.0, cls: 'wall' },
+  { kind: '', char: '⌫', name: '走道(橡皮)', eraser: true },
+];
+
+const EXTRA_KINDS = {
+  R: { kind: 'R', char: 'R', name: 'readingTable', bodyW: 1.8, bodyD: 0.9, rotatable: true, cls: 'read' },
+  S: { kind: 'S', char: 'S', name: 'wallSocket', bodyW: 0.6, bodyD: 0.24, rotatable: true, cls: 'socket' },
+  E: { kind: 'E', char: 'E', name: 'endPanelBox', bodyW: 0.6, bodyD: 0.8, rotatable: true, cls: 'panel' },
+};
+
+const INITIAL_LAYOUT = {
+  studyTables: [
+    {x:7,z:-10.62},
+    {x:7,z:-8.26},
+    {x:7,z:-5.9},
+    {x:7,z:-3.54},
+    {x:7,z:-1.18},
+    {x:7,z:1.18},
+    {x:7,z:3.54},
+    {x:7,z:5.9},
+    {x:7,z:8.26},
+    {x:7,z:10.62},
+    {x:10.2,z:-10.62},
+    {x:10.2,z:-8.26},
+    {x:10.2,z:-5.9},
+    {x:10.2,z:-3.54},
+    {x:10.2,z:-1.18},
+    {x:10.2,z:1.18},
+    {x:10.2,z:3.54},
+    {x:10.2,z:5.9},
+    {x:10.2,z:8.26},
+    {x:10.2,z:10.62},
+  ],
+  chargeTables: [],
+  columns: [
+    {x:-13,z:-9},
+    {x:-13,z:-5},
+    {x:-13,z:-1},
+    {x:-13,z:3},
+    {x:-9.5,z:-9},
+    {x:-9.5,z:-5},
+    {x:-9.5,z:-1},
+    {x:-9.5,z:3},
+    {x:-6,z:-9},
+    {x:-6,z:-5},
+    {x:-6,z:-1},
+    {x:-6,z:3},
+  ],
+  bookshelves: [
+    {x:-13,z:-7,"rotY":1},
+    {x:-13,z:1,"rotY":1},
+    {x:-9.5,z:-7,"rotY":1},
+    {x:-9.5,z:-3,"rotY":1},
+    {x:-6,z:-3,"rotY":1},
+    {x:-6,z:1,"rotY":1},
+  ],
+  endPanelBoxes: [
+    {x:-13,z:-9},
+    {x:-6,z:-9},
+  ],
+  readingTables: [
+    { x: 14.2, z: -6, rotY: 1 },
+    { x: 14.2, z: -2, rotY: 1 },
+  ],
+  wallSockets: [
+    { x: -8, z: 11.73, rotY: 0 },
+    { x: 14, z: 11.73, rotY: 0 },
+    { x: -15.73, z: 0, rotY: 1 },
+  ],
+};
+
+let brush = BRUSHES[0];
+let elements = [];
+let zTop = 10;
+let drag = null;
+let seq = 0;
+
+const canvas = document.getElementById('canvas');
+const preview = document.getElementById('preview');
+const statusEl = document.getElementById('status');
+const brushesEl = document.getElementById('brushes');
+const countEl = document.getElementById('countInfo');
+const hintEl = document.getElementById('hint');
+
+const halfW = () => ROOM_W / 2;
+const halfH = () => ROOM_H / 2;
+
+function toPx(cx, cy) {
+  return { left: (cx + halfW()) * CELL, top: (halfH() - cy) * CELL };
+}
+
+function toMeters(px, py) {
+  return { x: px / CELL - halfW(), z: halfH() - py / CELL };
+}
+
+function elDims(el) {
+  const b = BRUSHES.find(b => b.kind === el.kind) || EXTRA_KINDS[el.kind];
+  let w = b.bodyW, d = b.bodyD;
+  if (b.rotatable && el.rotY) { const t = w; w = d; d = t; }
+  return { w, d, b };
+}
+
+function buildElDiv(el) {
+  const b = elDims(el).b;
+  const div = document.createElement('div');
+  div.className = 'el ' + b.cls;
+  const body = document.createElement('div');
+  body.className = 'body';
+  const lbl = document.createElement('div');
+  lbl.className = 'lbl';
+  lbl.textContent = el.kind || ' ';
+  div.appendChild(body);
+  if (b.chairW) {
+    for (let i = 0; i < 2; i++) {
+      const chair = document.createElement('div');
+      chair.className = 'chair';
+      div.appendChild(chair);
+    }
+  }
+  if (el.kind === '★') {
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    div.appendChild(dot);
+  }
+  div.appendChild(lbl);
+  div.addEventListener('pointerdown', onElementDown);
+  div.addEventListener('contextmenu', onElementMenu);
+  return div;
+}
+
+function placeElDiv(el) {
+  const { w, d, b } = elDims(el);
+  const p = toPx(el.x, el.z);
+  const div = el.div;
+  div.style.left = (p.left - (w * CELL) / 2) + 'px';
+  div.style.top = (p.top - (d * CELL) / 2) + 'px';
+  div.style.width = (w * CELL) + 'px';
+  div.style.height = (d * CELL) + 'px';
+  if (b.chairW) {
+    const chairs = div.querySelectorAll('.chair');
+    chairs.forEach((ch, i) => {
+      const sign = i === 0 ? -1 : 1;
+      ch.style.width = (b.chairW * CELL) + 'px';
+      ch.style.height = (b.bodyD * CELL) + 'px';
+      ch.style.left = (w / 2 + b.chairOff * sign - b.chairW / 2) * CELL + 'px';
+      ch.style.top = ((d - b.bodyD) / 2 * CELL) + 'px';
+    });
+  }
+  if (el.kind === '★') {
+    const dot = div.querySelector('.dot');
+    dot.style.left = (w * CELL / 2 - 5) + 'px';
+    dot.style.top = (d * CELL / 2 - 5) + 'px';
+  }
+}
+
+function clampCenter(x, z) {
+  return {
+    x: Math.max(-halfW() + 0.5, Math.min(halfW() - 0.5, x)),
+    z: Math.max(-halfH() + 0.5, Math.min(halfH() - 0.5, z)),
+  };
+}
+
+function snapHalf(v) {
+  return Math.round(v * 2) / 2;
+}
+
+function addElement(kind, x, z, rotY) {
+  const el = {
+    id: ++seq,
+    kind,
+    x: Math.round(x * 2) / 2,
+    z: Math.round(z * 2) / 2,
+    rotY: rotY || 0,
+    zIndex: ++zTop,
+  };
+  el.div = buildElDiv(el);
+  el.div.style.zIndex = el.zIndex;
+  canvas.appendChild(el.div);
+  elements.push(el);
+  placeElDiv(el);
+  refresh();
+  return el;
+}
+
+function removeElement(el) {
+  el.div.remove();
+  elements = elements.filter(e => e !== el);
+  refresh();
+}
+
+function elementsAtCell(c, r) {
+  const cellX0 = c - halfW(), cellZ1 = halfH() - r, cellZ0 = cellZ1 - 1;
+  return elements.filter(el => {
+    const { w, d } = elDims(el);
+    const x0 = el.x - w / 2, x1 = el.x + w / 2;
+    const z0 = el.z - d / 2, z1 = el.z + d / 2;
+    return x1 > cellX0 && x0 < cellX0 + 1 && z1 > cellZ0 && z0 < cellZ1;
+  });
+}
+
+function elementAt(px, py) {
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
+    const { w, d } = elDims(el);
+    const p = toPx(el.x, el.z);
+    if (px >= p.left - w * CELL / 2 && px <= p.left + w * CELL / 2 &&
+        py >= p.top - d * CELL / 2 && py <= p.top + d * CELL / 2) {
+      return el;
+    }
+  }
+  return null;
+}
+
+function cellOf(px, py) {
+  return { c: Math.floor(px / CELL), r: Math.floor(py / CELL) };
+}
+
+function cellValid(c, r) {
+  return c >= 0 && c < ROOM_W && r >= 0 && r < ROOM_H;
+}
+
+function cellCenter(c, r) {
+  return { x: c - halfW() + 0.5, z: halfH() - 0.5 - r };
+}
+
+function anchorOf(el) {
+  return {
+    c: Math.round(el.x + halfW() - 0.5),
+    r: Math.round(halfH() - 0.5 - el.z),
+  };
+}
+
+function stampCell(c, r) {
+  if (!cellValid(c, r)) return;
+  const m = cellCenter(c, r);
+  if (brush.eraser) {
+    const hit = elementsAtCell(c, r);
+    hit.forEach(removeElement);
+    if (hit.length) setStatus('清除 (x=' + c + ', z=' + (r - halfH()) + ') × ' + hit.length);
+    return;
+  }
+  const occupied = elements.some(el => {
+    const a = anchorOf(el);
+    return a.c === c && a.r === r;
+  });
+  if (occupied) return;
+  const el = addElement(brush.kind, m.x, m.z, eShiftAtDown ? 1 : 0);
+  if (brush.kind === '★') {
+    const stars = elements.filter(x => x.kind === '★').length;
+    if (stars > 2) setStatus('⚠ ★ 已 ' + stars + ' 个,规格限 1~2 个');
+  }
+  return el;
+}
+
+let eShiftAtDown = false;
+
+function cellsBetween(a, b) {
+  const out = [];
+  const dc = b.c - a.c, dr = b.r - a.r;
+  const steps = Math.max(Math.abs(dc), Math.abs(dr));
+  if (steps === 0) return out;
+  for (let i = 1; i <= steps; i++) {
+    out.push({ c: Math.round(a.c + (dc * i) / steps), r: Math.round(a.r + (dr * i) / steps) });
+  }
+  return out;
+}
+
+function startDrag(mode, e) {
+  drag = { mode, lastCell: null, stamped: new Set(), el: null, dx: 0, dy: 0 };
+  canvas.setPointerCapture(e.pointerId);
+}
+
+function startMoveDrag(el, e) {
+  drag = { mode: 'move', el, lastCell: null, stamped: null, dx: 0, dy: 0 };
+  const rect = canvas.getBoundingClientRect();
+  drag.dx = e.clientX - rect.left - (el.x + halfW()) * CELL;
+  drag.dy = e.clientY - rect.top - (halfH() - el.z) * CELL;
+  el.div.classList.add('dragging');
+  canvas.setPointerCapture(e.pointerId);
+}
+
+function paintTo(px, py) {
+  const { c, r } = cellOf(px, py);
+  if (!cellValid(c, r)) return;
+  const start = drag.lastCell || { c, r };
+  const cells = cellsBetween(start, { c, r });
+  cells.push({ c, r });
+  for (const cell of cells) {
+    const key = cell.c + ',' + cell.r;
+    if (drag.stamped.has(key)) continue;
+    drag.stamped.add(key);
+    stampCell(cell.c, cell.r);
+  }
+  drag.lastCell = { c, r };
+}
+
+function moveTo(px, py) {
+  const mx = px / CELL - halfW() - drag.dx / CELL;
+  const mz = halfH() - py / CELL - drag.dy / CELL;
+  const c = clampCenter(snapHalf(mx), snapHalf(mz));
+  drag.el.x = c.x;
+  drag.el.z = c.z;
+  placeElDiv(drag.el);
+}
+
+function onElementDown(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const rect = canvas.getBoundingClientRect();
+  const el = elementAt(e.clientX - rect.left, e.clientY - rect.top);
+  if (e.shiftKey && el && el.kind === 'B') {
+    el.rotY = el.rotY ? 0 : 1;
+    placeElDiv(el);
+    refresh();
+  }
+  if (brush.eraser) {
+    const { c, r } = cellOf(e.clientX - rect.left, e.clientY - rect.top);
+    startDrag('erase', e);
+    drag.lastCell = { c, r };
+    drag.stamped.add(c + ',' + r);
+    stampCell(c, r);
+    return;
+  }
+  if (!el) return;
+  startMoveDrag(el, e);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button === 2) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  const hit = elementAt(px, py);
+  eShiftAtDown = e.shiftKey;
+  if (brush.eraser) {
+    const { c, r } = cellOf(px, py);
+    startDrag('erase', e);
+    drag.lastCell = { c, r };
+    drag.stamped.add(c + ',' + r);
+    stampCell(c, r);
+    setStatus('批量清除模式:按住拖动');
+    return;
+  }
+  if (hit) return;
+  const { c, r } = cellOf(px, py);
+  if (!cellValid(c, r)) return;
+  startDrag('paint', e);
+  drag.lastCell = { c, r };
+  drag.stamped.add(c + ',' + r);
+  const el = stampCell(c, r);
+  if (el) setStatus('批量放置 ' + brush.name + ':按住拖动连续放置');
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  if (drag) {
+    if (drag.mode === 'move') moveTo(px, py);
+    else paintTo(px, py);
+    return;
+  }
+  const el = elementAt(px, py);
+  canvas.style.cursor = el ? 'grab' : (brush.eraser ? 'copy' : 'crosshair');
+  const { c, r } = cellOf(px, py);
+  if (cellValid(c, r)) {
+    hoverCell.style.display = 'block';
+    hoverCell.style.left = (c * CELL) + 'px';
+    hoverCell.style.top = (r * CELL) + 'px';
+  } else {
+    hoverCell.style.display = 'none';
+  }
+});
+
+function endDrag() {
+  if (!drag) return;
+  if (drag.el) drag.el.div.classList.remove('dragging');
+  drag = null;
+  refresh();
+}
+
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+function onElementMenu(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const rect = canvas.getBoundingClientRect();
+  const el = elementAt(e.clientX - rect.left, e.clientY - rect.top);
+  if (el) {
+    removeElement(el);
+    setStatus('已删除 ' + (el.kind || '元素'));
+  }
+}
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const el = elementAt(e.clientX - rect.left, e.clientY - rect.top);
+  if (el) {
+    removeElement(el);
+    setStatus('已删除 ' + (el.kind || '元素'));
+  }
+});
+
+const hoverCell = document.createElement('div');
+hoverCell.className = 'hoverCell';
+canvas.appendChild(hoverCell);
+
+function buildAxis() {
+  canvas.querySelectorAll('.axis').forEach(d => d.remove());
+  for (let c = 0; c < ROOM_W; c += 4) {
+    const d = document.createElement('div');
+    d.className = 'axis x';
+    d.textContent = String(c);
+    d.style.left = (c * CELL + 3) + 'px';
+    canvas.appendChild(d);
+  }
+  for (let r = 0; r < ROOM_H; r += 4) {
+    const d = document.createElement('div');
+    d.className = 'axis z';
+    d.textContent = String(-halfH() + r);
+    d.style.left = '3px';
+    d.style.top = (r * CELL + 2) + 'px';
+    canvas.appendChild(d);
+  }
+}
+
+function buildAscii() {
+  const grid = Array.from({ length: ROOM_H }, () => Array(ROOM_W).fill(' '));
+  for (const el of elements) {
+    const a = anchorOf(el);
+    if (a.c >= 0 && a.c < ROOM_W && a.r >= 0 && a.r < ROOM_H) grid[a.r][a.c] = el.kind;
+  }
+  const axis = ' '.repeat(8) + Array.from({ length: ROOM_W }, (_, i) => (i % 4 === 0 ? String(i) : ' ')).join('');
+  const lines = [axis];
+  for (let r = 0; r < ROOM_H; r++) {
+    const zl = -halfH() + r;
+    lines.push((r === 0 ? 'z=' : '  ') + String(zl).padStart(4) + '  ' + grid[r].join(''));
+  }
+  return lines.join('\n');
+}
+
+function updateHint() {
+  hintEl.textContent =
+    '列 = x(0~' + (ROOM_W - 1) + ', 左→右), 行 = z(-' + halfH() + '~+' + (halfH() - 1) +
+    ', 上→下, 中心 = 0), 1 格 = 1m · 当前 ' + ROOM_W + '×' + ROOM_H + 'm';
+}
+
+function refresh() {
+  const out = buildAscii();
+  window.__lastAscii = out;
+  preview.textContent = out;
+  const n = elements.length;
+  const stars = elements.filter(e => e.kind === '★').length;
+  countEl.innerHTML = '元素: <b>' + n + '</b> 个 · ★: <b>' + stars + '</b> 个';
+}
+
+function setStatus(msg) {
+  statusEl.textContent = msg;
+}
+
+function selectBrush(b) {
+  brush = b;
+  document.querySelectorAll('.brush').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.kind === b.kind);
+  });
+}
+
+function buildBrushes() {
+  BRUSHES.forEach((b, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'brush';
+    btn.dataset.kind = b.kind;
+    btn.innerHTML = '<span class="char">' + (b.eraser ? '⌫' : b.char) + '</span>' +
+      '<span>' + b.name + '</span><span class="key">' + (i + 1) + '</span>';
+    btn.addEventListener('click', () => selectBrush(b));
+    brushesEl.appendChild(btn);
+  });
+  selectBrush(BRUSHES[0]);
+}
+
+function applyRoomSize(w, h) {
+  w = Math.max(8, Math.min(128, Math.round(w / 2) * 2));
+  h = Math.max(8, Math.min(128, Math.round(h / 2) * 2));
+  ROOM_W = w;
+  ROOM_H = h;
+  canvas.style.width = (ROOM_W * CELL) + 'px';
+  canvas.style.height = (ROOM_H * CELL) + 'px';
+  buildAxis();
+  for (const el of elements) placeElDiv(el);
+  const lost = elements.filter(el => {
+    const a = anchorOf(el);
+    return !(a.c >= 0 && a.c < ROOM_W && a.r >= 0 && a.r < ROOM_H);
+  }).length;
+  updateHint();
+  refresh();
+  setStatus(lost > 0
+    ? '已扩展至 ' + ROOM_W + '×' + ROOM_H + ' · ⚠ ' + lost + ' 个元素超出新边界(被隐藏,不在 ASCII)'
+    : '已扩展至 ' + ROOM_W + '×' + ROOM_H + 'm,中心保持在 (0,0)');
+}
+
+const sizeWInput = document.getElementById('sizeW');
+const sizeHInput = document.getElementById('sizeH');
+
+function commitSize() {
+  applyRoomSize(parseInt(sizeWInput.value, 10) || 32, parseInt(sizeHInput.value, 10) || 24);
+  sizeWInput.value = ROOM_W;
+  sizeHInput.value = ROOM_H;
+}
+sizeWInput.addEventListener('change', commitSize);
+sizeHInput.addEventListener('change', commitSize);
+sizeWInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitSize(); });
+sizeHInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitSize(); });
+
+async function copyAscii() {
+  const out = buildAscii();
+  window.__lastAscii = out;
+  try {
+    await navigator.clipboard.writeText(out);
+    setStatus('copied ' + ROOM_H + '×' + ROOM_W);
+  } catch (err) {
+    const ta = document.createElement('textarea');
+    ta.value = out;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+    ta.remove();
+    setStatus(ok ? 'copied ' + ROOM_H + '×' + ROOM_W + ' (fallback)' : '复制失败,请手动选择预览');
+  }
+}
+
+document.getElementById('copyBtn').addEventListener('click', copyAscii);
+
+document.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= BRUSHES.length) selectBrush(BRUSHES[n - 1]);
+});
+
+window.layout = {
+  place(kind, col, z) {
+    const b = BRUSHES.find(x => x.kind === kind) || EXTRA_KINDS[kind];
+    if (!b) { setStatus('未知元素: ' + kind); return null; }
+    return addElement(kind, col - halfW() + 0.5, -z - 0.5, 0);
+  },
+  clear() {
+    [...elements].forEach(removeElement);
+    setStatus('已清空全部');
+  },
+  resize(w, h) { applyRoomSize(w, h); },
+  ascii: () => buildAscii(),
+  get size() { return { w: ROOM_W, h: ROOM_H }; },
+};
+
+function loadInitialLayout() {
+  for (const t of INITIAL_LAYOUT.studyTables) addElement('T', t.x, t.z, 0);
+  for (const t of INITIAL_LAYOUT.chargeTables) addElement('★', t.x, t.z, 0);
+  for (const c of INITIAL_LAYOUT.columns) addElement('C', c.x, c.z, 0);
+  for (const b of INITIAL_LAYOUT.bookshelves) addElement('B', b.x, b.z, b.rotY ? 1 : 0);
+  for (const e of INITIAL_LAYOUT.endPanelBoxes) addElement('E', e.x, e.z, 0);
+  for (const r of INITIAL_LAYOUT.readingTables) addElement('R', r.x, r.z, r.rotY ? 1 : 0);
+  for (const s of INITIAL_LAYOUT.wallSockets) addElement('S', s.x, s.z, s.rotY ? 1 : 0);
+}
+
+buildBrushes();
+buildAxis();
+loadInitialLayout();
+updateHint();
+refresh();
+setStatus('已加载当前游戏布局(20 桌)');
+</script>
+</body>
+</html>
