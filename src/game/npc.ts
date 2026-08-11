@@ -30,12 +30,16 @@ export interface NpcControllerOptions {
   setOutletOccupied: (i: number, occ: boolean) => void;
   npcCount: number;
   cfg: NpcConfig;
+  /** 碰撞盒列表(轻量 AABB,与 player colliders 同源;npc 移动后推出防穿墙) */
+  colliders?: Array<{ minX: number; minZ: number; maxX: number; maxZ: number }>;
 }
 
 export interface NpcController {
   entities: NpcEntity[];
   update: (dt: number) => void;
   reset: (seed?: number) => void;
+  /** PR #16 fix:对全部实体跑一次碰撞推出(初始化 sync 后调用,清初始嵌柱) */
+  resolveAll: () => void;
 }
 
 /** 确定性 PRNG(mulberry32,与 scene 同款)—— 同 (seed, 调用序) 永远产同一序列,可单测。 */
@@ -50,13 +54,28 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function randRange(rng: () => number, min: number, max: number): number {
-  return min + rng() * (max - min);
-}
-
 export function createNpcController(opts: NpcControllerOptions): NpcController {
   const cfg = opts.cfg;
   let rng = mulberry32(1);
+
+  /** NPC 半径(轻量常量,与 player radius 0.32 同量级,避免 NPC 太贴墙) */
+  const NPC_RADIUS = 0.3;
+
+  /** 移动后碰撞推出:分轴检测 NPC 圆是否陷入某 AABB,沿该轴推出到贴面(与 player resolveAxis 同规则)。 */
+  function resolveCollision(e: NpcEntity): void {
+    const cols = opts.colliders;
+    if (!cols || cols.length === 0) return;
+    for (const b of cols) {
+      const insideX = e.x > b.minX - NPC_RADIUS && e.x < b.maxX + NPC_RADIUS;
+      const insideZ = e.z > b.minZ - NPC_RADIUS && e.z < b.maxZ + NPC_RADIUS;
+      if (!insideX || !insideZ) continue;
+      // 先沿 x 推,再沿 z 推(分轴,保证角落也解出)
+      if (e.x < (b.minX + b.maxX) / 2) e.x = b.minX - NPC_RADIUS;
+      else e.x = b.maxX + NPC_RADIUS;
+      if (e.z < (b.minZ + b.maxZ) / 2) e.z = b.minZ - NPC_RADIUS;
+      else e.z = b.maxZ + NPC_RADIUS;
+    }
+  }
 
   /** 遍历所有 outlets,找 isOutletOccupied(i)===false 的最近一个;-1 = 全占。 */
   function pickNearestFreeOutlet(fromX: number, fromZ: number): number {
@@ -72,6 +91,10 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       }
     }
     return best;
+  }
+
+  function randRange(rng: () => number, min: number, max: number): number {
+    return min + rng() * (max - min);
   }
 
   function newIdleTimer(): number {
@@ -129,6 +152,7 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
           const step = Math.min(cfg.walkSpeed * dt, dist);  // 防超调过头
           e.x += (dx / dist) * step;
           e.z += (dz / dist) * step;
+          resolveCollision(e);  // PR #16 fix:移动后防穿墙推出
         }
       } else {
         e.occupyTimer -= dt;
@@ -153,5 +177,9 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     }
   }
 
-  return { entities, update, reset };
+  function resolveAll(): void {
+    for (const e of entities) resolveCollision(e);
+  }
+
+  return { entities, update, reset, resolveAll };
 }

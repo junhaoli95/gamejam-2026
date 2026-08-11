@@ -7,6 +7,7 @@ import { mountGtaPrompt } from './ui/gtaPrompt';
 import { mountMissionToast } from './ui/missionToast';
 import { mountHighScore } from './ui/highScore';
 import { mountPlayerStats } from './game/playerStats';
+import { hasLineOfSight } from './game/los';
 import { createNpcController } from './game/npc';
 import { createNpcMeshManager } from './scene/npcMesh';
 import { CONFIG } from './game/config';
@@ -87,11 +88,15 @@ const controller = createThirdPersonController({
 const { getSharedState: getRawSharedState } = createSharedStateFacade(player, controller, outlets);
 
 /** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 won + PR #13 terrain/nearOutlet + PR #16 npcs。 */
+// PR #16 fix:nearOutlet 加视线检测 — 玩家→桩连线被 colliders 阻挡(隔墙)不算 near。
+// losBoxes 每次调用内联转换(rebuildTableZone 会改 colliders 内容,转换一次会 stale)。
 function getSharedState() {
   const s = getRawSharedState();
+  const losBoxes = colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z }));
   // PR #13 #9:近空桩标志(每帧算一次,供 gtaPrompt 显隐左上 prompt)
   const nearOutlet = s.outlets.some(o =>
-    !o.occupied && Math.hypot(o.x - s.player.x, o.z - s.player.z) < CONFIG.hud.promptRange,
+    !o.occupied && Math.hypot(o.x - s.player.x, o.z - s.player.z) < CONFIG.hud.promptRange &&
+    hasLineOfSight(s.player.x, s.player.z, o.x, o.z, losBoxes),  // PR #16 fix:隔墙不算
   );
   return {
     ...s,
@@ -147,6 +152,8 @@ const npcController = createNpcController({
   setOutletOccupied: setOutletOccupied,
   npcCount: CONFIG.npc.count,
   cfg: CONFIG.npc,
+  // PR #16 fix:colliders 转轻量 AABB 给 NPC 防穿墙(与 player 同源)
+  colliders: colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z })),
 });
 
 // 实体初始位置对齐场景已就座猫(randomizeOccupiedOutlets 摆位),避免开局瞬移
@@ -156,6 +163,7 @@ function syncNpcPositionsToMeshes(): void {
     const m = meshes[i];
     if (m) { e.x = m.position.x; e.z = m.position.z; }
   });
+  npcController.resolveAll();  // PR #16 fix:初始嵌柱推出
 }
 syncNpcPositionsToMeshes();
 
