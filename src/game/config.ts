@@ -20,10 +20,12 @@ export const CONFIG = {
     side: 0.35,
     up: 1.35,
     collidePad: 0.25,
-    collideSteps: 8,
     dampLambda: 12,       // 方向阻尼(快跟转向);camera tune 拆分后只管方向
     dampDistLambda: 5,    // 距离阻尼(慢跟近墙 clip 恢复,4-6 手感区);camera tune 新增
-    minDist: 1.4,
+    minDist: 1.4,         // 侧滑判定阈值:摆角清距 ≥ 1.4 才算机位够远;贴墙宁绕肩不贴脸
+    swingStepDeg: 10,     // 侧滑摆角步进(度);camera tune 第二轮
+    swingMaxDeg: 90,      // 侧滑最大摆角(度);camera tune 第二轮
+    swingHyst: 0.15,      // 摆角滞回带(米):临界清距抖动时沿用上帧摆角
   },
   dash: {
     startEnergy: 1.0,
