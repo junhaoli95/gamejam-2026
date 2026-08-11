@@ -9,6 +9,21 @@ export interface Aabb2D {
 }
 
 /**
+ * PR #17 fix:从 3D collider 列表生成视线检测用 2D box 列表,过滤矮家具。
+ * 桌(0.75m)/椅(0.9m)是矮家具——玩家 1.7m 视线越过,桌电位桩在桌面中心,
+ * 2D slab 会把桌子自身 AABB 当墙,导致"靠近桌子不能充电"。
+ * 高墙(柱 3.4 / 书架 2.4)保留,隔墙不算 near 语义不变。
+ */
+export function toLosBoxes(
+  colliders: ReadonlyArray<{ min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }>,
+  minWallHeight = 1.2,
+): Aabb2D[] {
+  return colliders
+    .filter(b => b.max.y >= minWallHeight)
+    .map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z }));
+}
+
+/**
  * 玩家 (px,pz)→ 目标 (ox,oz) 连线是否不被任何 AABB 阻挡。
  * slab method:对 x/z 两轴分别求线段在 AABB 范围内的参数区间,交集非空 = 被阻挡。
  */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasLineOfSight, type Aabb2D } from './los';
+import { hasLineOfSight, toLosBoxes, type Aabb2D } from './los';
 
 const WALL: Aabb2D = { minX: -1, minZ: -1, maxX: 1, maxZ: 1 };
 
@@ -58,5 +58,49 @@ describe('hasLineOfSight', () => {
     const column: Aabb2D = { minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 };
     // 桩在柱后方远处,不在表面 → 被挡
     expect(hasLineOfSight(-3, 0, 3, 0, [column])).toBe(false);
+  });
+});
+
+describe('toLosBoxes(矮家具过滤)', () => {
+  const box = (y: number) => ({ min: { x: -0.9, y: 0, z: -0.6 }, max: { x: 0.9, y, z: 0.6 } });
+
+  it('高墙(柱 3.4 / 书架 2.4)→ 保留', () => {
+    expect(toLosBoxes([box(3.4), box(2.4)])).toEqual([
+      { minX: -0.9, minZ: -0.6, maxX: 0.9, maxZ: 0.6 },
+      { minX: -0.9, minZ: -0.6, maxX: 0.9, maxZ: 0.6 },
+    ]);
+  });
+
+  it('矮家具(桌 0.75 / 椅 0.9 / 阅读桌 0.75)→ 过滤', () => {
+    expect(toLosBoxes([box(0.75), box(0.9)])).toEqual([]);
+  });
+});
+
+describe('桌面电位(桩=桌中心,矮桌不挡)', () => {
+  // 桌 collider:studyTable 1.8×1.2×h0.75(矮);桩在桌中心;玩家站桌边
+  const table = { min: { x: -0.9, y: 0, z: -0.6 }, max: { x: 0.9, y: 0.75, z: 0.6 } };
+
+  it('玩家站桌边(桌外 0.5m),桩=桌中心 → 有视线(可充电)', () => {
+    const boxes = toLosBoxes([table]);
+    // 桌子被过滤 → 视线畅通
+    expect(hasLineOfSight(0, -1.1, 0, 0, boxes)).toBe(true);
+  });
+
+  it('回归保护:若不过滤矮桌,玩家站桌边→桌中心必被自身 AABB 挡 → 这正是 bug 场景', () => {
+    // 原始 collider(不过滤)在 los 里 → 无视线(bug 复现)
+    expect(hasLineOfSight(0, -1.1, 0, 0, [WALL])).toBe(false);
+  });
+
+  it('高墙仍挡:玩家与桩之间有书架(高)隔开 → 无视线', () => {
+    const shelf = { min: { x: -1.5, y: 0, z: -0.3 }, max: { x: 1.5, y: 2.4, z: 0.3 } };
+    const boxes = toLosBoxes([table, shelf]);
+    // 玩家站桌南边,桩在桌中心,书架横在玩家与桌之间 → 书架挡 → 无视线
+    expect(hasLineOfSight(0, -4, 0, 0, boxes)).toBe(false);
+  });
+
+  it('椅子(矮 0.9)在玩家与桌桩之间 → 不挡', () => {
+    const chair = { min: { x: -0.225, y: 0, z: -1.1 }, max: { x: 0.225, y: 0.9, z: -0.2 } };
+    const boxes = toLosBoxes([table, chair]);
+    expect(hasLineOfSight(0, -1.6, 0, 0, boxes)).toBe(true);
   });
 });
