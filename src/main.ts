@@ -7,7 +7,7 @@ import { mountGtaPrompt } from './ui/gtaPrompt';
 import { mountMissionToast } from './ui/missionToast';
 import { mountHighScore } from './ui/highScore';
 import { mountPlayerStats } from './game/playerStats';
-import { hasLineOfSight } from './game/los';
+import { hasLineOfSight, toLosBoxes } from './game/los';
 import { createNpcController } from './game/npc';
 import { createNpcMeshManager } from './scene/npcMesh';
 import { CONFIG } from './game/config';
@@ -93,11 +93,14 @@ const { getSharedState: getRawSharedState } = createSharedStateFacade(player, co
 
 /** wrap:取 raw SharedState,覆写 battery/pips 为 runtime 真值 + PR #12 won + PR #13 terrain/nearOutlet + PR #16 npcs。 */
 // PR #16 fix:nearOutlet 加视线检测 — 玩家→桩连线被 colliders 阻挡(隔墙)不算 near。
+// PR #17 fix:losBoxes 用 toLosBoxes 过滤矮家具(桌/椅)——桌面电位桩在桌中心,
+// 若把桌子自身 AABB 当墙,玩家站桌边→桌中心连线必被挡,桌电位永远无法充电。
+// 高墙(柱/书架)保留,隔墙不算 near 语义不变。
 // losBoxes 每次调用内联转换(rebuildTableZone 会改 colliders 内容,转换一次会 stale)。
 // 公共判定:nearOutlet(gtaPrompt 显示)与 E 键判胜必须用同一逻辑,否则脱节(提示没显示但能充电)。
 function findNearOutlet(outlets: Array<{ x: number; z: number; occupied: boolean }>, px: number, pz: number):
   { x: number; z: number } | undefined {
-  const losBoxes = colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z }));
+  const losBoxes = toLosBoxes(colliders);
   return outlets.find(o =>
     !o.occupied && Math.hypot(o.x - px, o.z - pz) < CONFIG.hud.promptRange &&
     hasLineOfSight(px, pz, o.x, o.z, losBoxes),  // PR #16 fix:隔墙不算
