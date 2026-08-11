@@ -64,7 +64,11 @@ let gameOver = false;     // battery=0 → true
 let lowLatch = false;     // PR #16:低电警报只触发一次(restart 重置)
 
 // --- Runtime + PlayerStats(PR #10 — 必须先于 controller 实例化,因 controller 需读 dash mult)
-const runtime = {
+const runtime: {
+  battery: number;
+  pips: number;
+  appOpen: { RADAR: boolean; MAP: boolean; QUERY: boolean };
+} = {
   battery: CONFIG.battery.startPercent,
   pips: CONFIG.dash.startEnergy,
   appOpen: { RADAR: false, MAP: false, QUERY: false },
@@ -186,8 +190,16 @@ window.addEventListener('keydown', (e) => {
 });
 
 // --- Debug: expose getSharedState to window for console eval ---
+// __debug.noDrain = true 关闭倒计时(battery 锁 10%,调试用)
+let debugNoDrain = false;
 if (import.meta.env.DEV) {
-  Object.assign(window, { __debug: { getSharedState } });
+  Object.assign(window, {
+    __debug: {
+      getSharedState,
+      set noDrain(v: boolean) { debugNoDrain = v; },
+      get noDrain() { return debugNoDrain; },
+    },
+  });
 }
 
 // --- Resize ---
@@ -228,6 +240,8 @@ function animate() {
     // PR #16 B:NPC 状态机推进 + 头顶箭头/mesh 同步
     npcController.update(dt);
     npcMeshManager.update(npcController.entities);
+    // debug 调试模式:关闭倒计时(battery 锁 10% 不掉) — __debug.noDrain = true 启用
+    if (debugNoDrain) runtime.battery = Math.max(runtime.battery, CONFIG.battery.startPercent);
     // §2.5.5 game over 检测:battery=0 且未胜 → gameOver=true
     if (runtime.battery <= 0) {
       gameOver = true;
