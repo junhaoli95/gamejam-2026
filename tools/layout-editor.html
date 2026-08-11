@@ -17,34 +17,45 @@ body {
 }
 header {
   position: fixed; top: 0; left: 0; right: 0; height: 46px;
-  display: flex; align-items: center; gap: 14px;
+  display: flex; align-items: center; gap: 10px;
   padding: 0 14px;
   background: #22272e;
   border-bottom: 1px solid #3a4150;
   z-index: 10;
 }
 header h1 { font-size: 14px; margin: 0; white-space: nowrap; }
-header .hint { font-size: 12px; color: #9aa3b2; }
+header .hint { font-size: 11px; color: #9aa3b2; }
 header .spacer { flex: 1; }
 #status { font-size: 12px; color: #8ec07c; white-space: nowrap; }
-#copyBtn {
+.hbtn {
+  background: #2a303a; color: #d8dbe0; border: 1px solid #3a4150; border-radius: 4px;
+  padding: 7px 10px; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.hbtn:hover:not(:disabled) { background: #333b47; }
+.hbtn:disabled { opacity: 0.4; cursor: default; }
+#saveBtn {
   background: #2e8b57; color: #fff; border: none; border-radius: 4px;
   padding: 7px 14px; font-size: 13px; cursor: pointer; white-space: nowrap;
 }
-#copyBtn:hover { background: #379963; }
-#copyBtn:active { transform: translateY(1px); }
+#saveBtn:hover:not(:disabled) { background: #379963; }
+#saveBtn:disabled { opacity: 0.5; cursor: default; }
+#saveBtn:active:not(:disabled) { transform: translateY(1px); }
+#copyBtn {
+  background: #2a303a; color: #d8dbe0; border: 1px solid #3a4150; border-radius: 4px;
+  padding: 7px 10px; font-size: 12px; cursor: pointer;
+}
 
 main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-start; }
 
 #library {
-  width: 168px; flex-shrink: 0; background: #22272e;
+  width: 190px; flex-shrink: 0; background: #22272e;
   border: 1px solid #3a4150; border-radius: 6px; padding: 10px;
 }
 #library h2 { font-size: 12px; margin: 0 0 8px; color: #9aa3b2; font-weight: 600; }
 .brush {
   display: flex; align-items: center; gap: 8px; width: 100%;
   background: #2a303a; border: 1px solid #3a4150; border-radius: 4px;
-  color: #d8dbe0; padding: 6px 8px; margin-bottom: 6px; cursor: pointer;
+  color: #d8dbe0; padding: 5px 8px; margin-bottom: 5px; cursor: pointer;
   font-size: 12px; text-align: left;
 }
 .brush:hover { background: #333b47; }
@@ -54,17 +65,30 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 #countInfo { margin-top: 8px; font-size: 11px; color: #9aa3b2; line-height: 1.6; }
 #countInfo b { color: #d8dbe0; }
 
-#sizeBox {
+.box {
   margin-top: 10px; padding: 8px; background: #1d2228; border-radius: 4px;
   font-size: 11px; color: #9aa3b2;
 }
-#sizeBox .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
-#sizeBox label { width: 20px; }
-#sizeBox input {
-  width: 56px; background: #262b33; color: #d8dbe0; border: 1px solid #3a4150;
-  border-radius: 3px; padding: 3px 6px; font-size: 12px;
+.box .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
+.box label { width: 34px; flex-shrink: 0; }
+.box input[type="number"], .box input[type="text"] {
+  width: 52px; background: #262b33; color: #d8dbe0; border: 1px solid #3a4150;
+  border-radius: 3px; padding: 3px 5px; font-size: 12px;
 }
-#sizeBox .unit { color: #6b7480; }
+.box .unit { color: #6b7480; }
+.box input[type="checkbox"] { accent-color: #4f8cc9; }
+.smallbtn {
+  background: #2a303a; color: #d8dbe0; border: 1px solid #3a4150; border-radius: 3px;
+  padding: 3px 8px; font-size: 11px; cursor: pointer;
+}
+.smallbtn:hover:not(:disabled) { background: #333b47; }
+.smallbtn:disabled { opacity: 0.4; cursor: default; }
+#simInfo { margin-top: 6px; font-size: 11px; color: #2dff7a; line-height: 1.6; }
+#histList { margin-top: 6px; max-height: 140px; overflow-y: auto; font-size: 11px; line-height: 1.8; }
+#histList .histrow { display: flex; gap: 6px; align-items: center; }
+#histList .histmeta { color: #9aa3b2; flex: 1; }
+#propsBox .row .propval { color: #d8dbe0; }
+#propsBox .row .propval b { font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
 
 #help {
   margin-top: 10px; font-size: 11px; color: #6f7885; line-height: 1.7;
@@ -100,6 +124,7 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 }
 .el { position: absolute; cursor: grab; touch-action: none; }
 .el.dragging { cursor: grabbing; z-index: 5; }
+.el.selected { outline: 1px dashed #ffd76a; outline-offset: 2px; }
 .el .lbl {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 700; pointer-events: none;
@@ -125,6 +150,11 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 .el.socket .lbl { color: #6fae74; font-size: 9px; }
 .el.panel .body { background: #b8bcc0; box-shadow: inset 0 0 0 1px #7f848b; }
 .el.panel .lbl { color: #3d434b; }
+.sim-dot, .sim-cand {
+  position: absolute; border-radius: 50%; pointer-events: none; z-index: 2;
+}
+.sim-dot { width: 5px; height: 5px; background: #2dff7a; box-shadow: 0 0 3px #2dff7a; }
+.sim-cand { width: 3px; height: 3px; background: #56636e; }
 
 #out { flex: 1; min-width: 360px; }
 #out h2 { font-size: 12px; margin: 0 0 6px; color: #9aa3b2; font-weight: 600; }
@@ -140,11 +170,14 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 </head>
 <body>
 <header>
-  <h1>Library ASCII Layout Editor</h1>
+  <h1>Library Layout Editor</h1>
   <span id="hint" class="hint"></span>
   <div class="spacer"></div>
   <span id="status">ready</span>
-  <button id="copyBtn">Copy ASCII</button>
+  <button id="undoBtn" type="button" class="hbtn" title="撤销 (Ctrl+Z)">撤销</button>
+  <button id="redoBtn" type="button" class="hbtn" title="重做 (Ctrl+Shift+Z)">重做</button>
+  <button id="copyBtn" type="button" class="hbtn" title="复制 ASCII(给人看的预览)">Copy ASCII</button>
+  <button id="saveBtn" title="保存 JSON 到游戏 → HMR 立即生效">保存到游戏</button>
 </header>
 
 <main>
@@ -152,20 +185,55 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
     <h2>元素库</h2>
     <div id="brushes"></div>
     <div id="countInfo"></div>
-    <div id="sizeBox">
+
+    <div id="sizeBox" class="box">
       <b>区域大小</b>
       <div class="row"><label for="sizeW">W</label><input id="sizeW" type="number" min="8" max="128" step="2" value="32" aria-label="区域宽 W 米"><span class="unit">m</span></div>
       <div class="row"><label for="sizeH">H</label><input id="sizeH" type="number" min="8" max="128" step="2" value="24" aria-label="区域高 H 米"><span class="unit">m</span></div>
-      <div style="color:#6b7480">修改后立即扩展画布(中心保持 0,0)</div>
+      <div style="color:#6b7480">修改立即扩展画布(中心保持 0,0)</div>
     </div>
+
+    <div id="simBox" class="box">
+      <b>电位模拟(每局随机)</b>
+      <div class="row">
+        <label for="simSeed">seed</label><input id="simSeed" type="number" aria-label="随机种子"><button id="simDice" type="button" class="smallbtn" type="button">掷骰</button>
+        <label for="simFix" style="width:auto">固定</label><input id="simFix" type="checkbox" aria-label="固定 seed 导出">
+      </div>
+      <div class="row">
+        <label for="simColMin">柱</label><input id="simColMin" type="number" min="0" max="12" aria-label="柱电位最少"><label for="simColMax" style="width:auto">~</label><input id="simColMax" type="number" min="0" max="12" aria-label="柱电位最多"><span class="unit">根</span>
+      </div>
+      <div class="row">
+        <label for="simWallMin">墙</label><input id="simWallMin" type="number" min="0" max="26" aria-label="墙壁插最少"><label for="simWallMax" style="width:auto">~</label><input id="simWallMax" type="number" min="0" max="26" aria-label="墙壁插最多"><span class="unit">个</span>
+      </div>
+      <div id="simInfo">seed 12345 · 柱 0/0 · 墙 0/0 · 总桩 0</div>
+    </div>
+
+    <div id="histBox" class="box">
+      <b>游戏侧历史(服务器)</b>
+      <div id="histList">服务器未连接 — 先跑 <code>node tools/save-server.mjs</code></div>
+    </div>
+
+    <div id="propsBox" class="box hidden">
+      <b>选中元素</b>
+      <div class="row"><label>类型</label><span class="propval" id="propKind"></span></div>
+      <div class="row"><label>坐标</label><span class="propval"><b id="propX"></b>, <b id="propZ"></b></span></div>
+      <div class="row" id="propRotRow"><label>朝向</label><span class="propval" id="propRot"></span></div>
+      <div class="row">
+        <button type="button" class="smallbtn" id="nudgeXm">x-0.5</button>
+        <button type="button" class="smallbtn" id="nudgeXp">x+0.5</button>
+        <button type="button" class="smallbtn" id="nudgeZm">z-0.5</button>
+        <button type="button" class="smallbtn" id="nudgeZp">z+0.5</button>
+        <button type="button" class="smallbtn" id="propDel">删除</button>
+      </div>
+    </div>
+
     <div id="help">
-      已加载当前游戏布局,在它基础上改<br>
-      左键按住拖动 = 批量放置(经过的每格放一个)<br>
-      左键按住已有元素拖动 = 移动(0.5m 吸附)<br>
-      Shift+拖动 B 切横/竖 · 右键删除<br>
-      橡皮: 左键拖 = 批量清除<br>
-      数字键 1~6 选笔刷 · ★ 限 1~2 个<br>
-      R=readingTable · S=wallSocket · E=端板盒
+      左键拖 = 批量放置 · 拖已有元素 = 移动(0.5m)<br>
+      Shift+拖 B 切横/竖 · 右键删 · 橡皮批量清<br>
+      点元素看属性 · 数字 1~6 选笔刷<br>
+      Ctrl+Z 撤销 · ★ 画笔保留,游戏侧未实现<br>
+      R/S/E = readingTable/wallSocket/端板盒<br>
+      <button id="resetBtn" type="button" class="smallbtn" style="margin-top:6px">重置为初始布局(清本地历史)</button>
     </div>
   </aside>
 
@@ -198,6 +266,11 @@ const EXTRA_KINDS = {
   R: { kind: 'R', char: 'R', name: 'readingTable', bodyW: 1.8, bodyD: 0.9, rotatable: true, cls: 'read' },
   S: { kind: 'S', char: 'S', name: 'wallSocket', bodyW: 0.6, bodyD: 0.24, rotatable: true, cls: 'socket' },
   E: { kind: 'E', char: 'E', name: 'endPanelBox', bodyW: 0.6, bodyD: 0.8, rotatable: true, cls: 'panel' },
+};
+
+const KIND_NAMES = {
+  T: 'studyTable', '★': 'studyTable-charge', C: 'column', B: 'bookshelf',
+  '#': 'wallBlock', R: 'readingTable', S: 'wallSocket', E: 'endPanelBox',
 };
 
 const INITIAL_LAYOUT = {
@@ -266,6 +339,15 @@ let elements = [];
 let zTop = 10;
 let drag = null;
 let seq = 0;
+let selectedEl = null;
+
+let sim = { seed: 12345, columnMin: 4, columnMax: 6, wallMin: 2, wallMax: 4, fixSeed: false };
+
+let historyStack = [];
+let redoStack = [];
+let gestureBefore = null;
+const HISTORY_LIMIT = 50;
+const STORE_KEY = 'layoutEditor.v1';
 
 const canvas = document.getElementById('canvas');
 const preview = document.getElementById('preview');
@@ -273,6 +355,9 @@ const statusEl = document.getElementById('status');
 const brushesEl = document.getElementById('brushes');
 const countEl = document.getElementById('countInfo');
 const hintEl = document.getElementById('hint');
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
+const saveBtn = document.getElementById('saveBtn');
 
 const halfW = () => ROOM_W / 2;
 const halfH = () => ROOM_H / 2;
@@ -375,6 +460,7 @@ function addElement(kind, x, z, rotY) {
 }
 
 function removeElement(el) {
+  if (selectedEl === el) selectElement(null);
   el.div.remove();
   elements = elements.filter(e => e !== el);
   refresh();
@@ -500,12 +586,14 @@ function onElementDown(e) {
   e.stopPropagation();
   const rect = canvas.getBoundingClientRect();
   const el = elementAt(e.clientX - rect.left, e.clientY - rect.top);
+  selectElement(el);
   if (e.shiftKey && el && el.kind === 'B') {
     el.rotY = el.rotY ? 0 : 1;
     placeElDiv(el);
     refresh();
   }
   if (brush.eraser) {
+    if (!gestureBefore) gestureBefore = snapshot();
     const { c, r } = cellOf(e.clientX - rect.left, e.clientY - rect.top);
     startDrag('erase', e);
     drag.lastCell = { c, r };
@@ -514,6 +602,7 @@ function onElementDown(e) {
     return;
   }
   if (!el) return;
+  if (!gestureBefore) gestureBefore = snapshot();
   startMoveDrag(el, e);
 }
 
@@ -523,8 +612,10 @@ canvas.addEventListener('pointerdown', (e) => {
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
   const hit = elementAt(px, py);
+  if (!hit) selectElement(null);
   eShiftAtDown = e.shiftKey;
   if (brush.eraser) {
+    if (!gestureBefore) gestureBefore = snapshot();
     const { c, r } = cellOf(px, py);
     startDrag('erase', e);
     drag.lastCell = { c, r };
@@ -536,6 +627,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (hit) return;
   const { c, r } = cellOf(px, py);
   if (!cellValid(c, r)) return;
+  if (!gestureBefore) gestureBefore = snapshot();
   startDrag('paint', e);
   drag.lastCell = { c, r };
   drag.stamped.add(c + ',' + r);
@@ -568,6 +660,10 @@ function endDrag() {
   if (!drag) return;
   if (drag.el) drag.el.div.classList.remove('dragging');
   drag = null;
+  if (gestureBefore) {
+    gestureBefore = null;
+    pushHistory(snapshot());
+  }
   refresh();
 }
 
@@ -581,6 +677,7 @@ function onElementMenu(e) {
   const el = elementAt(e.clientX - rect.left, e.clientY - rect.top);
   if (el) {
     removeElement(el);
+    pushHistory(snapshot());
     setStatus('已删除 ' + (el.kind || '元素'));
   }
 }
@@ -591,6 +688,7 @@ canvas.addEventListener('contextmenu', (e) => {
   const el = elementAt(e.clientX - rect.left, e.clientY - rect.top);
   if (el) {
     removeElement(el);
+    pushHistory(snapshot());
     setStatus('已删除 ' + (el.kind || '元素'));
   }
 });
@@ -635,17 +733,8 @@ function buildAscii() {
 
 function updateHint() {
   hintEl.textContent =
-    '列 = x(0~' + (ROOM_W - 1) + ', 左→右), 行 = z(-' + halfH() + '~+' + (halfH() - 1) +
-    ', 上→下, 中心 = 0), 1 格 = 1m · 当前 ' + ROOM_W + '×' + ROOM_H + 'm';
-}
-
-function refresh() {
-  const out = buildAscii();
-  window.__lastAscii = out;
-  preview.textContent = out;
-  const n = elements.length;
-  const stars = elements.filter(e => e.kind === '★').length;
-  countEl.innerHTML = '元素: <b>' + n + '</b> 个 · ★: <b>' + stars + '</b> 个';
+    '列 = x(0~' + (ROOM_W - 1) + '), 行 = z(-' + halfH() + '~+' + (halfH() - 1) +
+    '), 1 格 = 1m · ' + ROOM_W + '×' + ROOM_H + 'm';
 }
 
 function setStatus(msg) {
@@ -662,6 +751,7 @@ function selectBrush(b) {
 function buildBrushes() {
   BRUSHES.forEach((b, i) => {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'brush';
     btn.dataset.kind = b.kind;
     btn.innerHTML = '<span class="char">' + (b.eraser ? '⌫' : b.char) + '</span>' +
@@ -672,38 +762,417 @@ function buildBrushes() {
   selectBrush(BRUSHES[0]);
 }
 
-function applyRoomSize(w, h) {
-  w = Math.max(8, Math.min(128, Math.round(w / 2) * 2));
-  h = Math.max(8, Math.min(128, Math.round(h / 2) * 2));
+function refresh() {
+  const out = buildAscii();
+  window.__lastAscii = out;
+  preview.textContent = out;
+  renderSim();
+  renderProps();
+  const n = elements.length;
+  const stars = elements.filter(e => e.kind === '★').length;
+  countEl.innerHTML = '元素: <b>' + n + '</b> 个 · ★: <b>' + stars + '</b> 个 · 电位(此局): <b>' + outletTotal() + '</b>';
+}
+
+// ── 电位模拟(与游戏同算法:mulberry32 + Fisher-Yates,PR-B 移植到 scene)──
+
+function mulberry32(seed) {
+  let a = seed | 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function drawCount(rng, range) {
+  const [min, max] = range;
+  return min + Math.floor(rng() * (max - min + 1));
+}
+
+function shuffle(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  }
+  return arr;
+}
+
+function wallCandidates(w, h) {
+  const out = [];
+  const hw = w / 2, hh = h / 2, m = 0.27;
+  for (let x = -(hw - 2); x <= hw - 2; x += 2) out.push({ x, z: hh - m, wall: 'south' });
+  for (let z = -(hh - 2); z <= hh - 2; z += 2) out.push({ x: -(hw - m), z, wall: 'west' });
+  return out;
+}
+
+function columnFace(x) {
+  return x < 0 ? 1 : -1;
+}
+
+function drawOutlets(seed, ranges, columns, candidates) {
+  const rng = mulberry32(seed);
+  const columnCount = drawCount(rng, ranges.columnCount);
+  const wallCount = drawCount(rng, ranges.wallCount);
+  const cols = shuffle(columns.slice(), rng).slice(0, columnCount);
+  const walls = shuffle(candidates.slice(), rng).slice(0, wallCount);
+  return { columnCount, wallCount, columns: cols, walls };
+}
+
+function outletTotal() {
+  const cols = elements.filter(e => e.kind === 'C').length;
+  const tables = elements.filter(e => e.kind === 'T' || e.kind === '★').length;
+  const d = simDraw();
+  return tables + d.columnCount + d.wallCount;
+}
+
+function simDraw() {
+  const columns = elements.filter(e => e.kind === 'C');
+  const cands = wallCandidates(ROOM_W, ROOM_H);
+  return drawOutlets(sim.seed, { columnCount: [sim.columnMin, sim.columnMax], wallCount: [sim.wallMin, sim.wallMax] }, columns, cands);
+}
+
+function renderSim() {
+  canvas.querySelectorAll('.sim-dot, .sim-cand').forEach(d => d.remove());
+  const draw = simDraw();
+  const hw = halfW(), hh = halfH();
+  const dotAt = (x, z, cls) => {
+    const d = document.createElement('div');
+    d.className = cls;
+    d.style.left = ((x + hw) * CELL - 2.5) + 'px';
+    d.style.top = ((hh - z) * CELL - 2.5) + 'px';
+    canvas.appendChild(d);
+  };
+  for (const cand of wallCandidates(ROOM_W, ROOM_H)) dotAt(cand.x, cand.z, 'sim-cand');
+  for (const w of draw.walls) dotAt(w.x, w.z, 'sim-dot');
+  for (const c of draw.columns) dotAt(c.x + columnFace(c.x) * 0.46, c.z, 'sim-dot');
+  const tables = elements.filter(e => e.kind === 'T' || e.kind === '★').length;
+  document.getElementById('simInfo').textContent =
+    'seed ' + sim.seed + ' · 柱 ' + draw.columnCount + '/' + elements.filter(e => e.kind === 'C').length +
+    ' · 墙 ' + draw.wallCount + ' · 总桩 ' + (tables + draw.columnCount + draw.wallCount) + '(含桌 ' + tables + ')';
+}
+
+// ── 选中元素属性面板 ──
+
+function selectElement(el) {
+  if (selectedEl) selectedEl.div.classList.remove('selected');
+  selectedEl = el;
+  if (el) el.div.classList.add('selected');
+  renderProps();
+}
+
+function renderProps() {
+  const box = document.getElementById('propsBox');
+  const el = selectedEl;
+  if (!el) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  const b = BRUSHES.find(x => x.kind === el.kind) || EXTRA_KINDS[el.kind];
+  document.getElementById('propKind').textContent = b ? b.name + ' (' + (el.kind || '走道') + ')' : el.kind;
+  document.getElementById('propX').textContent = el.x;
+  document.getElementById('propZ').textContent = el.z;
+  const rotRow = document.getElementById('propRotRow');
+  if (b && b.rotatable) {
+    rotRow.style.display = '';
+    document.getElementById('propRot').textContent = el.rotY ? '竖(rotY=90°)' : '横(rotY=0°)';
+  } else {
+    rotRow.style.display = 'none';
+  }
+}
+
+function nudgeSelected(dx, dz) {
+  if (!selectedEl) return;
+  const c = clampCenter(snapHalf(selectedEl.x + dx), snapHalf(selectedEl.z + dz));
+  selectedEl.x = c.x;
+  selectedEl.z = c.z;
+  placeElDiv(selectedEl);
+  refresh();
+  pushHistory(snapshot());
+}
+
+document.getElementById('nudgeXm').addEventListener('click', () => nudgeSelected(-0.5, 0));
+document.getElementById('nudgeXp').addEventListener('click', () => nudgeSelected(0.5, 0));
+document.getElementById('nudgeZm').addEventListener('click', () => nudgeSelected(0, -0.5));
+document.getElementById('nudgeZp').addEventListener('click', () => nudgeSelected(0, 0.5));
+document.getElementById('propDel').addEventListener('click', () => {
+  if (selectedEl) {
+    removeElement(selectedEl);
+    pushHistory(snapshot());
+  }
+});
+
+// ── 撤销 / 重做 / 本地持久化 ──
+
+function snapshot() {
+  return {
+    roomW: ROOM_W,
+    roomH: ROOM_H,
+    sim: { ...sim },
+    elements: elements.map(e => ({ kind: e.kind, x: e.x, z: e.z, rotY: e.rotY })),
+  };
+}
+
+function saveLocal() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      state: snapshot(),
+      history: historyStack.slice(-HISTORY_LIMIT),
+      redo: redoStack.slice(-HISTORY_LIMIT),
+    }));
+  } catch (err) { /* 存储满/不可用则静默 */ }
+}
+
+function pushHistory(state) {
+  historyStack.push(state);
+  redoStack.length = 0;
+  if (historyStack.length > HISTORY_LIMIT) historyStack.shift();
+  saveLocal();
+  updateHistoryBtns();
+}
+
+function applyState(s) {
+  ROOM_W = s.roomW;
+  ROOM_H = s.roomH;
+  sim = { ...s.sim };
+  document.getElementById('sizeW').value = ROOM_W;
+  document.getElementById('sizeH').value = ROOM_H;
+  canvas.style.width = (ROOM_W * CELL) + 'px';
+  canvas.style.height = (ROOM_H * CELL) + 'px';
+  buildAxis();
+  document.querySelectorAll('.el').forEach(d => d.remove());
+  elements = [];
+  selectedEl = null;
+  for (const e of s.elements) addElement(e.kind, e.x, e.z, e.rotY || 0);
+  syncSimInputs();
+  updateHint();
+  refresh();
+}
+
+function updateHistoryBtns() {
+  undoBtn.disabled = historyStack.length < 2;
+  redoBtn.disabled = redoStack.length === 0;
+}
+
+function undo() {
+  if (historyStack.length < 2) return;
+  redoStack.push(historyStack.pop());
+  applyState(historyStack[historyStack.length - 1]);
+  saveLocal();
+  updateHistoryBtns();
+  setStatus('已撤销');
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  historyStack.push(redoStack.pop());
+  applyState(historyStack[historyStack.length - 1]);
+  saveLocal();
+  updateHistoryBtns();
+  setStatus('已重做');
+}
+
+undoBtn.addEventListener('click', undo);
+redoBtn.addEventListener('click', redo);
+
+// ── 模拟器输入 ──
+
+const simSeedInput = document.getElementById('simSeed');
+const simFixInput = document.getElementById('simFix');
+const simColMin = document.getElementById('simColMin');
+const simColMax = document.getElementById('simColMax');
+const simWallMin = document.getElementById('simWallMin');
+const simWallMax = document.getElementById('simWallMax');
+
+function syncSimInputs() {
+  simSeedInput.value = sim.seed;
+  simFixInput.checked = sim.fixSeed;
+  simColMin.value = sim.columnMin;
+  simColMax.value = sim.columnMax;
+  simWallMin.value = sim.wallMin;
+  simWallMax.value = sim.wallMax;
+}
+
+function simChanged() {
+  sim.seed = parseInt(simSeedInput.value, 10) || 0;
+  sim.fixSeed = simFixInput.checked;
+  sim.columnMin = Math.max(0, Math.min(12, parseInt(simColMin.value, 10) || 0));
+  sim.columnMax = Math.max(sim.columnMin, Math.min(12, parseInt(simColMax.value, 10) || 0));
+  sim.wallMin = Math.max(0, Math.min(26, parseInt(simWallMin.value, 10) || 0));
+  sim.wallMax = Math.max(sim.wallMin, Math.min(26, parseInt(simWallMax.value, 10) || 0));
+  syncSimInputs();
+  refresh();
+  pushHistory(snapshot());
+}
+
+simSeedInput.addEventListener('change', simChanged);
+simFixInput.addEventListener('change', simChanged);
+simColMin.addEventListener('change', simChanged);
+simColMax.addEventListener('change', simChanged);
+simWallMin.addEventListener('change', simChanged);
+simWallMax.addEventListener('change', simChanged);
+document.getElementById('simDice').addEventListener('click', () => {
+  simSeedInput.value = Math.floor(Math.random() * 0x7fffffff);
+  simChanged();
+  setStatus('新 seed: ' + simSeedInput.value);
+});
+
+// ── 区域大小 ──
+
+const sizeWInput = document.getElementById('sizeW');
+const sizeHInput = document.getElementById('sizeH');
+
+function commitSize() {
+  const w = Math.max(8, Math.min(128, Math.round((parseInt(sizeWInput.value, 10) || 32) / 2) * 2));
+  const h = Math.max(8, Math.min(128, Math.round((parseInt(sizeHInput.value, 10) || 24) / 2) * 2));
+  sizeWInput.value = w;
+  sizeHInput.value = h;
+  if (w === ROOM_W && h === ROOM_H) return;
   ROOM_W = w;
   ROOM_H = h;
   canvas.style.width = (ROOM_W * CELL) + 'px';
   canvas.style.height = (ROOM_H * CELL) + 'px';
   buildAxis();
   for (const el of elements) placeElDiv(el);
-  const lost = elements.filter(el => {
-    const a = anchorOf(el);
-    return !(a.c >= 0 && a.c < ROOM_W && a.r >= 0 && a.r < ROOM_H);
-  }).length;
   updateHint();
   refresh();
-  setStatus(lost > 0
-    ? '已扩展至 ' + ROOM_W + '×' + ROOM_H + ' · ⚠ ' + lost + ' 个元素超出新边界(被隐藏,不在 ASCII)'
-    : '已扩展至 ' + ROOM_W + '×' + ROOM_H + 'm,中心保持在 (0,0)');
-}
-
-const sizeWInput = document.getElementById('sizeW');
-const sizeHInput = document.getElementById('sizeH');
-
-function commitSize() {
-  applyRoomSize(parseInt(sizeWInput.value, 10) || 32, parseInt(sizeHInput.value, 10) || 24);
-  sizeWInput.value = ROOM_W;
-  sizeHInput.value = ROOM_H;
+  pushHistory(snapshot());
+  setStatus('已扩展至 ' + ROOM_W + '×' + ROOM_H + 'm');
 }
 sizeWInput.addEventListener('change', commitSize);
 sizeHInput.addEventListener('change', commitSize);
 sizeWInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitSize(); });
 sizeHInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitSize(); });
+
+// ── 导出 / 保存 ──
+
+function buildJson() {
+  return {
+    room: { w: ROOM_W, h: ROOM_H },
+    outlets: {
+      columnCount: [sim.columnMin, sim.columnMax],
+      wallCount: [sim.wallMin, sim.wallMax],
+      seed: sim.fixSeed ? sim.seed : null,
+    },
+    placements: elements.map(e => {
+      const p = { kind: KIND_NAMES[e.kind] || e.kind, x: e.x, z: e.z };
+      if (e.rotY) p.rotY = e.rotY * 90;
+      return p;
+    }),
+  };
+}
+
+const SERVER = 'http://localhost:8899';
+
+const KIND_BY_NAME = {
+  studyTable: 'T', 'studyTable-charge': '★', column: 'C', bookshelf: 'B',
+  wallBlock: '#', readingTable: 'R', wallSocket: 'S', endPanelBox: 'E',
+};
+
+function stateFromJson(j) {
+  const o = j.outlets || {};
+  const cc = Array.isArray(o.columnCount) ? o.columnCount : [4, 6];
+  const wc = Array.isArray(o.wallCount) ? o.wallCount : [2, 4];
+  return {
+    roomW: j.room.w,
+    roomH: j.room.h,
+    sim: {
+      seed: typeof o.seed === 'number' ? o.seed : sim.seed,
+      columnMin: cc[0], columnMax: cc[1],
+      wallMin: wc[0], wallMax: wc[1],
+      fixSeed: typeof o.seed === 'number',
+    },
+    elements: j.placements.map(p => ({
+      kind: KIND_BY_NAME[p.kind] || p.kind,
+      x: p.x,
+      z: p.z,
+      rotY: p.rotY ? p.rotY / 90 : 0,
+    })),
+  };
+}
+
+async function serverInfo() {
+  try {
+    const r = await fetch(SERVER + '/health', { mode: 'cors' });
+    return r.ok ? await r.json() : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function refreshSaveState() {
+  const info = await serverInfo();
+  saveBtn.disabled = !info;
+  saveBtn.title = info ? '保存 JSON 到 ' + info.target : '保存到游戏(未连接:先跑 node tools/save-server.mjs)';
+  const listEl = document.getElementById('histList');
+  if (!info) {
+    listEl.innerHTML = '服务器未连接 — 先跑 <code>node tools/save-server.mjs</code>';
+    return;
+  }
+  try {
+    const r = await fetch(SERVER + '/layout/history', { mode: 'cors' });
+    const j = await r.json();
+    if (j.history.length === 0) {
+      listEl.innerHTML = '暂无历史(保存后自动备份)';
+      return;
+    }
+    listEl.innerHTML = j.history.map(h =>
+      '<div class="histrow"><span class="histmeta">' + h.time + ' · ' + h.room + ' · ' + h.count + ' 个</span>' +
+      '<button type="button" class="smallbtn" data-restore="' + h.file + '">恢复</button></div>'
+    ).join('');
+    listEl.querySelectorAll('button[data-restore]').forEach(btn => {
+      btn.addEventListener('click', () => restoreFrom(btn.dataset.restore));
+    });
+  } catch (err) {
+    listEl.innerHTML = '历史读取失败';
+  }
+}
+
+async function saveToGame() {
+  setStatus('保存中…');
+  try {
+    const r = await fetch(SERVER + '/layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildJson()),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      setStatus('已保存 → 游戏 HMR 生效 · 备份 ' + (j.backup || '无') + ' · 历史 ' + j.historySize + ' 份' +
+        (j.config && j.config.changed ? ' · config 已同步' : ''));
+    } else {
+      setStatus('保存失败: ' + (j.error || r.status));
+    }
+  } catch (err) {
+    setStatus('保存失败:服务器未启动(先跑 node tools/save-server.mjs)');
+  }
+  refreshSaveState();
+}
+
+async function restoreFrom(file) {
+  pushHistory(snapshot());
+  setStatus('恢复 ' + file + '…');
+  try {
+    const r = await fetch(SERVER + '/layout/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file }),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      const cur = await fetch(SERVER + '/layout', { mode: 'cors' }).then(res => res.json());
+      applyState(stateFromJson(cur));
+      pushHistory(snapshot());
+      setStatus('已恢复 ' + file + (j.config && j.config.changed ? ' · config 已同步' : ''));
+    } else {
+      setStatus('恢复失败: ' + (j.error || r.status));
+    }
+  } catch (err) {
+    setStatus('恢复失败:服务器未连接');
+  }
+  refreshSaveState();
+}
+
+saveBtn.addEventListener('click', saveToGame);
 
 async function copyAscii() {
   const out = buildAscii();
@@ -729,6 +1198,14 @@ document.getElementById('copyBtn').addEventListener('click', copyAscii);
 
 document.addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) redo(); else undo();
+    return;
+  }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (e.key === 'Escape') { selectElement(null); return; }
   const n = parseInt(e.key, 10);
   if (n >= 1 && n <= BRUSHES.length) selectBrush(BRUSHES[n - 1]);
 });
@@ -737,14 +1214,24 @@ window.layout = {
   place(kind, col, z) {
     const b = BRUSHES.find(x => x.kind === kind) || EXTRA_KINDS[kind];
     if (!b) { setStatus('未知元素: ' + kind); return null; }
-    return addElement(kind, col - halfW() + 0.5, -z - 0.5, 0);
+    const el = addElement(kind, col - halfW() + 0.5, -z - 0.5, 0);
+    pushHistory(snapshot());
+    return el;
   },
   clear() {
     [...elements].forEach(removeElement);
+    pushHistory(snapshot());
     setStatus('已清空全部');
   },
-  resize(w, h) { applyRoomSize(w, h); },
+  resize(w, h) {
+    sizeWInput.value = w;
+    sizeHInput.value = h;
+    commitSize();
+  },
   ascii: () => buildAscii(),
+  json: () => buildJson(),
+  save: saveToGame,
+  sim: () => ({ ...sim, draw: simDraw() }),
   get size() { return { w: ROOM_W, h: ROOM_H }; },
 };
 
@@ -758,12 +1245,30 @@ function loadInitialLayout() {
   for (const s of INITIAL_LAYOUT.wallSockets) addElement('S', s.x, s.z, s.rotY ? 1 : 0);
 }
 
+document.getElementById('resetBtn').addEventListener('click', () => {
+  localStorage.removeItem(STORE_KEY);
+  location.reload();
+});
+
 buildBrushes();
 buildAxis();
-loadInitialLayout();
-updateHint();
-refresh();
-setStatus('已加载当前游戏布局(20 桌)');
+let stored = null;
+try { stored = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (err) { stored = null; }
+if (stored && stored.state) {
+  historyStack = stored.history || [];
+  redoStack = stored.redo || [];
+  applyState(stored.state);
+  setStatus('已恢复上次会话(重置按钮可回到初始布局)');
+} else {
+  loadInitialLayout();
+  syncSimInputs();
+  updateHint();
+  refresh();
+  setStatus('已加载当前游戏布局(20 桌)');
+}
+if (historyStack.length === 0) historyStack.push(snapshot());
+updateHistoryBtns();
+refreshSaveState();
 </script>
 </body>
 </html>
