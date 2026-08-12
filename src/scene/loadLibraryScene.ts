@@ -82,7 +82,7 @@ interface LayoutPlacement {
 
 interface LayoutData {
   room: { w: number; h: number };
-  outlets: { columnCount: number[]; wallCount: number[]; seed: number | null };
+  outlets: { columnCount: number[]; wallCount: number[]; seed: number | null; studyTableGreenRate?: number };
   placements: LayoutPlacement[];
 }
 
@@ -178,6 +178,40 @@ function computeFreeSeats(count: number, seed: number): Set<string> {
     [all[i], all[j]] = [all[j], all[i]];
   }
   return new Set(all.slice(0, Math.max(0, Math.min(count, all.length))));
+}
+
+/**
+ * 加权无放回选 N 个:权重越高越优先。返回选中索引 Set。
+ * 权重 0 的项永不被选(除非候选全为 0 且 N>0,则 fallback 均匀选)。
+ */
+function weightedPickByWeight(weights: number[], n: number, rng: () => number): Set<number> {
+  const N = weights.length;
+  const out = new Set<number>();
+  if (N === 0 || n <= 0) return out;
+  const k = Math.min(n, N);
+  const idxs = Array.from({ length: N }, (_, i) => i);
+  const totalW = weights.reduce((a, b) => a + b, 0);
+  if (totalW <= 0) {
+    for (let i = N - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
+    }
+    for (let i = 0; i < k; i++) out.add(idxs[i]);
+    return out;
+  }
+  const arr = idxs.slice();
+  for (let pick = 0; pick < k; pick++) {
+    const remaining = arr.filter(i => !out.has(i));
+    const w = remaining.reduce((a, i) => a + (weights[i] >= 0 ? weights[i] : 0), 0);
+    let r = rng() * w;
+    let chosen = remaining[0];
+    for (const i of remaining) {
+      r -= Math.max(0, weights[i]);
+      if (r <= 0) { chosen = i; break; }
+    }
+    out.add(chosen);
+  }
+  return out;
 }
 
 // ── 每局随机电位(layout.outlets 参数 + seed)──
@@ -878,15 +912,40 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       outletPositions[i].occupied = false;
       for (const m of outletMeshGroups[i]) m.material = outletMatEmpty;
     }
-    // table-level outlet:occupied 由 freeSeats 推导(4 椅都坐猫 = 占);★ 摸奖桌恒空跳过
+    // table-level outlet:每局绿桩总数 = round(自习桌 × rate),按空椅数加权选桌
+    // 空椅 0 的桌权重 0(不参与),空椅 1+ 的桌按 freeSeatWeights 优先被选
+    // ★ 摸奖桌恒绿跳过(chargeOutletIndexes)
+    const studyOutletIdxs: number[] = [];
     for (let i = 0; i < outletPositions.length; i++) {
-      const keys = tableOutletSeatKeys[i];
-      if (keys && !chargeOutletIndexes.has(i)) {
-        const occ = keys.every(k => !freeSeats.has(k));
-        outletPositions[i].occupied = occ;
-        if (occ) {
+      if (tableOutletSeatKeys[i] && !chargeOutletIndexes.has(i)) studyOutletIdxs.push(i);
+    }
+    const greenCount = Math.min(
+      studyOutletIdxs.length,
+      Math.max(0, Math.round(studyOutletIdxs.length * (LAYOUT.outlets.studyTableGreenRate ?? CONFIG.charging.studyTableGreenRate))),
+    );
+    if (studyOutletIdxs.length > 0 && greenCount > 0) {
+      const weights = studyOutletIdxs.map(i => {
+        const keys = tableOutletSeatKeys[i]!;
+        const freeN = keys.filter(k => freeSeats.has(k)).length;
+        return CONFIG.charging.freeSeatWeights[freeN] ?? 0;
+      });
+      const rng = mulberry32(seed ^ 0x5eed);
+      const chosen = weightedPickByWeight(weights, greenCount, rng);
+      const chosenOutlets = new Set<number>();
+      for (const w of chosen) chosenOutlets.add(studyOutletIdxs[w]);
+      for (const i of chosenOutlets) {
+        outletPositions[i].occupied = false;  // 绿
+      }
+      for (const i of studyOutletIdxs) {
+        if (!chosenOutlets.has(i)) {
+          outletPositions[i].occupied = true;  // 红
           for (const m of outletMeshGroups[i]) m.material = outletMatOccupied;
         }
+      }
+    } else {
+      for (const i of studyOutletIdxs) {
+        outletPositions[i].occupied = true;
+        for (const m of outletMeshGroups[i]) m.material = outletMatOccupied;
       }
     }
     npcMeshes.forEach(m => scene.remove(m));

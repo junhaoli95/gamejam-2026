@@ -52,6 +52,10 @@ export const CONFIG = {
     occupyMaxSec: 15,
     arriveDist: 0.8,       // 到桩 0.8m 内 = occupying
   },
+  charging: {
+    studyTableGreenRate: 0.05,  // 每局绿桩总数 = round(自习桌数 × rate),60 桌 → 3,15 桌 → 1
+    freeSeatWeights: [0, 50, 80, 100, 100],  // 按空椅 0~4 加权选桌:0 空椅不参与,3+ 空椅保底
+  },
   hud: {
     promptRange: 1.5,       // 近空桩触发左上 GTA prompt 距离(米),spec §4.1
     objectiveText: '电量耗尽之前找到充电位置',  // 中下常驻任务条文案

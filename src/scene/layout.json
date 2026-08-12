@@ -12,7 +12,8 @@
       2,
       4
     ],
-    "seed": null
+    "seed": null,
+    "studyTableGreenRate": 0.05
   },
   "placements": [
     {
