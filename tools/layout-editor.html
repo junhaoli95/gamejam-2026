@@ -123,6 +123,7 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
   border: 1px solid #5f8fc9; background: rgba(79,140,201,0.12);
   pointer-events: none; display: none; z-index: 1;
 }
+.el.ghost { opacity: 0.35; cursor: crosshair; z-index: 3; }
 .el { position: absolute; cursor: grab; touch-action: none; }
 .el.dragging { cursor: grabbing; z-index: 5; }
 .el.selected { outline: 1px dashed #ffd76a; outline-offset: 2px; }
@@ -177,6 +178,7 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
   <span id="status">ready</span>
   <button id="undoBtn" type="button" class="hbtn" title="撤销 (Ctrl+Z)">撤销</button>
   <button id="redoBtn" type="button" class="hbtn" title="重做 (Ctrl+Shift+Z)">重做</button>
+  <button id="clearRedoBtn" type="button" class="hbtn" title="清空全部重做历史">清重做</button>
   <button id="copyBtn" type="button" class="hbtn" title="复制 ASCII(给人看的预览)">Copy ASCII</button>
   <button id="saveBtn" title="保存 JSON 到游戏 → HMR 立即生效">保存到游戏</button>
 </header>
@@ -230,16 +232,16 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
       <div class="row" id="propRotRow"><label>朝向</label><span class="propval" id="propRot"></span></div>
       <div class="row">
         <button type="button" class="smallbtn" id="rotateBtn" title="切换横/竖(90°)">旋转 90°</button>
-        <button type="button" class="smallbtn" id="nudgeXm">x-0.5</button>
-        <button type="button" class="smallbtn" id="nudgeXp">x+0.5</button>
-        <button type="button" class="smallbtn" id="nudgeZm">z-0.5</button>
-        <button type="button" class="smallbtn" id="nudgeZp">z+0.5</button>
+        <button type="button" class="smallbtn" id="nudgeXm">x-1</button>
+        <button type="button" class="smallbtn" id="nudgeXp">x+1</button>
+        <button type="button" class="smallbtn" id="nudgeZm">z-1</button>
+        <button type="button" class="smallbtn" id="nudgeZp">z+1</button>
         <button type="button" class="smallbtn" id="propDel">删除</button>
       </div>
     </div>
 
     <div id="help">
-      左键拖 = 批量放置 · 拖已有元素 = 移动(0.5m)<br>
+      左键拖 = 批量放置(自动避让重叠) · 拖已有元素 = 移动(1 格)<br>
       <b>旋转 90°:Shift+点击放置 或 选中后点"旋转 90°"</b><br>
       右键删 · 橡皮批量清 · 数字 1~6 选笔刷<br>
       Ctrl+Z 撤销 · ★ 画笔保留,游戏侧未实现<br>
@@ -389,7 +391,7 @@ function elDims(el) {
   return { w, d, b };
 }
 
-function buildElDiv(el) {
+function buildElDiv(el, withEvents = true) {
   const b = elDims(el).b;
   const div = document.createElement('div');
   div.className = 'el ' + b.cls;
@@ -412,8 +414,10 @@ function buildElDiv(el) {
     div.appendChild(dot);
   }
   div.appendChild(lbl);
-  div.addEventListener('pointerdown', onElementDown);
-  div.addEventListener('contextmenu', onElementMenu);
+  if (withEvents) {
+    div.addEventListener('pointerdown', onElementDown);
+    div.addEventListener('contextmenu', onElementMenu);
+  }
   return div;
 }
 
@@ -449,8 +453,8 @@ function clampCenter(x, z) {
   };
 }
 
-function snapHalf(v) {
-  return Math.round(v * 2) / 2;
+function snapToGrid(v) {
+  return Math.round(v);
 }
 
 function addElement(kind, x, z, rotY) {
@@ -520,6 +524,26 @@ function anchorOf(el) {
   };
 }
 
+/** 元素实体占用(body,与游戏 collider 一致;椅为视觉突出,不参与判定)。 */
+function footprintDims(kind, rotY) {
+  const b = BRUSHES.find(x => x.kind === kind) || EXTRA_KINDS[kind];
+  if (!b) return { w: 1, d: 1 };
+  let w = b.bodyW, d = b.bodyD;
+  if (b.rotatable && rotY) { const t = w; w = d; d = t; }
+  return { w, d };
+}
+
+/** 新元素 (kind,rotY) 放在 (mx,mz) 是否与已有元素实体占用重叠(1 格吸附,相邻即拒)。 */
+function wouldOverlap(kind, rotY, mx, mz) {
+  const { w, d } = footprintDims(kind, rotY);
+  const GAP = 0.02;
+  for (const el of elements) {
+    const eb = footprintDims(el.kind, el.rotY);
+    if (Math.abs(mx - el.x) < (w + eb.w) / 2 - GAP && Math.abs(mz - el.z) < (d + eb.d) / 2 - GAP) return true;
+  }
+  return false;
+}
+
 function stampCell(c, r) {
   if (!cellValid(c, r)) return;
   const m = cellCenter(c, r);
@@ -529,15 +553,11 @@ function stampCell(c, r) {
     if (hit.length) setStatus('清除 (x=' + c + ', z=' + (r - halfH()) + ') × ' + hit.length);
     return;
   }
-  const occupied = elements.some(el => {
-    const a = anchorOf(el);
-    return a.c === c && a.r === r;
-  });
-  if (occupied) return;
   const brushDef = BRUSHES.find(x => x.kind === brush.kind) || EXTRA_KINDS[brush.kind];
   const rotY = brushDef && brushDef.rotatable
     ? (eShiftAtDown ? 1 - defaultRot : defaultRot)
     : 0;
+  if (wouldOverlap(brush.kind, rotY, m.x, m.z)) return;
   const el = addElement(brush.kind, m.x, m.z, rotY);
   if (brush.kind === '★') {
     const stars = elements.filter(x => x.kind === '★').length;
@@ -576,6 +596,7 @@ function startMoveDrag(el, e) {
 function paintTo(px, py) {
   const { c, r } = cellOf(px, py);
   if (!cellValid(c, r)) return;
+  showGhost(c, r);
   const start = drag.lastCell || { c, r };
   const cells = cellsBetween(start, { c, r });
   cells.push({ c, r });
@@ -591,7 +612,7 @@ function paintTo(px, py) {
 function moveTo(px, py) {
   const mx = px / CELL - halfW() - drag.dx / CELL;
   const mz = halfH() - py / CELL - drag.dy / CELL;
-  const c = clampCenter(snapHalf(mx), snapHalf(mz));
+  const c = clampCenter(snapToGrid(mx), snapToGrid(mz));
   drag.el.x = c.x;
   drag.el.z = c.z;
   placeElDiv(drag.el);
@@ -656,7 +677,7 @@ canvas.addEventListener('pointermove', (e) => {
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
   if (drag) {
-    if (drag.mode === 'move') moveTo(px, py);
+    if (drag.mode === 'move') { hideGhost(); moveTo(px, py); }
     else paintTo(px, py);
     return;
   }
@@ -667,8 +688,10 @@ canvas.addEventListener('pointermove', (e) => {
     hoverCell.style.display = 'block';
     hoverCell.style.left = (c * CELL) + 'px';
     hoverCell.style.top = (r * CELL) + 'px';
+    showGhost(c, r);
   } else {
     hoverCell.style.display = 'none';
+    hideGhost();
   }
 });
 
@@ -712,6 +735,51 @@ canvas.addEventListener('contextmenu', (e) => {
 const hoverCell = document.createElement('div');
 hoverCell.className = 'hoverCell';
 canvas.appendChild(hoverCell);
+
+// ── 放置预览 ghost:显示当前笔刷实际占用格数(如自习桌含椅 4×2 格)──
+
+let ghostDiv = null;
+
+function ghostRotY() {
+  const b = BRUSHES.find(x => x.kind === brush.kind) || EXTRA_KINDS[brush.kind];
+  return b && b.rotatable ? (eShiftAtDown ? 1 - defaultRot : defaultRot) : 0;
+}
+
+function rebuildGhost() {
+  if (ghostDiv) { ghostDiv.remove(); ghostDiv = null; }
+  if (brush.eraser) return;
+  const b = BRUSHES.find(x => x.kind === brush.kind) || EXTRA_KINDS[brush.kind];
+  if (!b) return;
+  const tmp = { kind: brush.kind, x: 0, z: 0, rotY: b.rotatable ? defaultRot : 0 };
+  ghostDiv = buildElDiv(tmp, false);
+  ghostDiv.classList.add('ghost');
+  ghostDiv.style.pointerEvents = 'none';
+  canvas.appendChild(ghostDiv);
+  tmp.div = ghostDiv;
+  placeElDiv(tmp);
+  ghostDiv.style.visibility = 'hidden';
+}
+
+function showGhost(c, r) {
+  if (!ghostDiv) return;
+  const m = cellCenter(c, r);
+  const rotY = ghostRotY();
+  const b = BRUSHES.find(x => x.kind === brush.kind) || EXTRA_KINDS[brush.kind];
+  if (!b) return;
+  ghostDiv.style.visibility = 'hidden';
+  if (brush.eraser) return;
+  const el = { kind: brush.kind, x: m.x, z: m.z, rotY };
+  el.div = ghostDiv;
+  placeElDiv(el);
+  const overlap = wouldOverlap(brush.kind, rotY, m.x, m.z);
+  ghostDiv.style.visibility = 'visible';
+  ghostDiv.style.opacity = overlap ? '0.18' : '0.35';
+  ghostDiv.style.outline = overlap ? '1px solid #ff6b6b' : 'none';
+}
+
+function hideGhost() {
+  if (ghostDiv) ghostDiv.style.visibility = 'hidden';
+}
 
 function buildAxis() {
   canvas.querySelectorAll('.axis').forEach(d => d.remove());
@@ -762,6 +830,7 @@ function selectBrush(b) {
   document.querySelectorAll('.brush').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.kind === b.kind);
   });
+  rebuildGhost();
 }
 
 function buildBrushes() {
@@ -901,7 +970,7 @@ function renderProps() {
 
 function nudgeSelected(dx, dz) {
   if (!selectedEl) return;
-  const c = clampCenter(snapHalf(selectedEl.x + dx), snapHalf(selectedEl.z + dz));
+  const c = clampCenter(snapToGrid(selectedEl.x + dx), snapToGrid(selectedEl.z + dz));
   selectedEl.x = c.x;
   selectedEl.z = c.z;
   placeElDiv(selectedEl);
@@ -920,10 +989,10 @@ document.getElementById('rotateBtn').addEventListener('click', () => {
   setStatus('已旋转 90°(' + (selectedEl.rotY ? '竖' : '横') + ')');
 });
 
-document.getElementById('nudgeXm').addEventListener('click', () => nudgeSelected(-0.5, 0));
-document.getElementById('nudgeXp').addEventListener('click', () => nudgeSelected(0.5, 0));
-document.getElementById('nudgeZm').addEventListener('click', () => nudgeSelected(0, -0.5));
-document.getElementById('nudgeZp').addEventListener('click', () => nudgeSelected(0, 0.5));
+document.getElementById('nudgeXm').addEventListener('click', () => nudgeSelected(-1, 0));
+document.getElementById('nudgeXp').addEventListener('click', () => nudgeSelected(1, 0));
+document.getElementById('nudgeZm').addEventListener('click', () => nudgeSelected(0, -1));
+document.getElementById('nudgeZp').addEventListener('click', () => nudgeSelected(0, 1));
 document.getElementById('propDel').addEventListener('click', () => {
   if (selectedEl) {
     removeElement(selectedEl);
@@ -1008,6 +1077,12 @@ function redo() {
 undoBtn.addEventListener('click', undo);
 redoBtn.addEventListener('click', redo);
 
+document.getElementById('clearRedoBtn').addEventListener('click', () => {
+  redoStack.length = 0;
+  updateHistoryBtns();
+  setStatus('已清空重做历史(' + (historyStack.length - 1) + ' 步可撤销)');
+});
+
 // ── 模拟器输入 ──
 
 const simSeedInput = document.getElementById('simSeed');
@@ -1061,6 +1136,7 @@ function setDefaultShelfRot(v) {
   if (defaultRot === v) return;
   defaultRot = v;
   syncRotBtns();
+  rebuildGhost();
   pushHistory(snapshot());
   setStatus('默认' + (v ? '竖放' : '横放') + '(所有可旋转元素,Shift 点击临时取反)');
 }
@@ -1265,7 +1341,10 @@ window.layout = {
   place(kind, col, z) {
     const b = BRUSHES.find(x => x.kind === kind) || EXTRA_KINDS[kind];
     if (!b) { setStatus('未知元素: ' + kind); return null; }
-    const el = addElement(kind, col - halfW() + 0.5, -z - 0.5, 0);
+    const x = col - halfW() + 0.5;
+    const gz = -z - 0.5;
+    if (wouldOverlap(kind, 0, x, gz)) { setStatus('位置重叠,已拒绝 (x=' + col + ', z=' + z + ')'); return null; }
+    const el = addElement(kind, x, gz, 0);
     pushHistory(snapshot());
     return el;
   },
@@ -1333,6 +1412,7 @@ async function initLayout() {
   }
   if (historyStack.length === 0) historyStack.push(snapshot());
   syncRotBtns();
+  rebuildGhost();
   updateHistoryBtns();
   refreshSaveState();
   setInterval(refreshSaveState, 5000);
