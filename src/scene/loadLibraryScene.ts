@@ -111,11 +111,16 @@ export const DEFAULT_DEBUG_PARAMS: DebugParams = {
 };
 
 // ── 布局派生 helpers ──
+/** layout.json 的 rotY 是度数(编辑器导出),场景统一转弧度。 */
+function rotRad(deg: number | undefined): number {
+  return ((deg ?? 0) % 360) * (Math.PI / 180);
+}
+
 /** 自习桌 + 摸奖桌 ★(tableZone 通路,按 placements 顺序给 tableIdx 作座位 key) */
 function layoutTables(): Placement[] {
   return LAYOUT.placements
     .filter(p => p.kind === 'studyTable' || p.kind === 'studyTable-charge')
-    .map(p => ({ kind: p.kind as ModelKind, x: p.x, z: p.z, rotY: p.rotY ?? 0 }));
+    .map(p => ({ kind: p.kind as ModelKind, x: p.x, z: p.z, rotY: rotRad(p.rotY) }));
 }
 
 /** 静态家具(书架/柱/readingTable);wallSocket/endPanelBox/wallBlock 由随机电位接管,忽略。 */
@@ -124,7 +129,7 @@ function layoutStatic(): { placements: Placement[]; ignoredKinds: string[] } {
   const ignored = new Set<string>();
   for (const p of LAYOUT.placements) {
     if (p.kind === 'bookshelf' || p.kind === 'column' || p.kind === 'readingTable') {
-      placements.push({ kind: p.kind, x: p.x, z: p.z, rotY: p.rotY ?? 0 });
+      placements.push({ kind: p.kind, x: p.x, z: p.z, rotY: rotRad(p.rotY) });
     } else if (p.kind === 'wallSocket' || p.kind === 'endPanelBox' || p.kind === 'wallBlock') {
       ignored.add(p.kind);
     }
@@ -401,7 +406,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   ];
   for (const [cx, cz, w, d] of WALL_SEGMENTS) {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), wallMat);
-    wall.position.set(cx, WALL_H / 2, cz);
+    // 下沉 0.01:墙底埋入地板、墙顶低于天花板,消除两处共面 z-fighting(闪烁)
+    wall.position.set(cx, WALL_H / 2 - 0.01, cz);
     scene.add(wall);
   }
   // 东窗下槛 + 窗上楣
