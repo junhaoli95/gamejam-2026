@@ -613,7 +613,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   // PR #12 §2.5.4 / PR #13 #3:NPC 占位坐姿猫(createSeatedCat,随机毛色+朝向),
   // 放在选中桩的 (x, 0.45, z+0.6)。换 GLB 时只改 createSeatedCat 函数体。
   const npcMeshes: THREE.Group[] = [];
-  const NPC_SEED = 1;
+  const NPC_SEED = Math.floor(Math.random() * 0x7fffffff) | 0;  // 每局不同
 
   // ── 窗边 readingTable 座位:静态(2 人桌,西侧椅)──
   const SEAT_OFFSETS = [-0.45, 0.45];
