@@ -32,7 +32,7 @@ import layout from './layout.json';
 //     including the chair AABBs that block passage between rows.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ModelKind = 'bookshelf' | 'column' | 'studyTable' | 'studyTable-charge' | 'readingTable' | 'wallSocket';
+export type ModelKind = 'bookshelf' | 'column' | 'studyTable' | 'studyTable-charge' | 'readingTable' | 'wallSocket' | 'wallBlock';
 
 const MODEL_PATHS: Record<ModelKind, string> = {
   bookshelf:     'library/bookshelf.glb',
@@ -41,6 +41,7 @@ const MODEL_PATHS: Record<ModelKind, string> = {
   'studyTable-charge': 'library/studyTable.glb',
   readingTable:  'library/readingTable.glb',
   wallSocket:    'library/wallSocket.glb',
+  wallBlock:     'library/wallBlock.glb',
 };
 
 const MODEL_DIMS: Record<ModelKind, { w: number; h: number; d: number }> = {
@@ -50,6 +51,7 @@ const MODEL_DIMS: Record<ModelKind, { w: number; h: number; d: number }> = {
   'studyTable-charge': { w: 1.8, h: 0.75, d: 1.2 },
   readingTable:  { w: 1.8, h: 0.75, d: 0.9 },
   wallSocket:    { w: 0.3, h: 0.5,  d: 0.12 },
+  wallBlock:     { w: 1.0, h: 3.2,  d: 1.0 }, // 编辑器 # 室内隔墙块(全高,带 collider)
 };
 
 const PLACEHOLDER_COLOR: Record<ModelKind, number> = {
@@ -59,6 +61,7 @@ const PLACEHOLDER_COLOR: Record<ModelKind, number> = {
   'studyTable-charge': 0xb08c5e,
   readingTable:  0xb08c5e,
   wallSocket:    0x1a2a1a,
+  wallBlock:     0x6b4a2f, // 与边界墙同色(胡桃木)
 };
 
 interface Placement {
@@ -67,9 +70,6 @@ interface Placement {
   z: number;
   rotY?: number;
 }
-
-const FLOOR_W = 32;
-const FLOOR_D = 24;
 
 // ── 布局数据(layout.json)──
 // 房间/家具坐标唯一真相源。编辑器保存 → HMR 生效。placements 顺序 = 编辑器元素顺序。
@@ -87,6 +87,12 @@ interface LayoutData {
 }
 
 const LAYOUT: LayoutData = layout;
+
+// 房间尺寸唯一真相源 = layout.json(编辑器保存 → HMR 生效;save-server 同步 CONFIG.world)
+const ROOM_W = LAYOUT.room.w;
+const ROOM_H = LAYOUT.room.h;
+const HALF_W = ROOM_W / 2;
+const HALF_H = ROOM_H / 2;
 
 // 桌/椅内部子布局(非布局级,保留只读常量,不可调)
 const DEFAULT_SEAT_SIDE_DIST = 0.95;
@@ -123,14 +129,14 @@ function layoutTables(): Placement[] {
     .map(p => ({ kind: p.kind as ModelKind, x: p.x, z: p.z, rotY: rotRad(p.rotY) }));
 }
 
-/** 静态家具(书架/柱/readingTable);wallSocket/endPanelBox/wallBlock 由随机电位接管,忽略。 */
+/** 静态家具(书架/柱/readingTable/wallBlock 室内墙);wallSocket/endPanelBox 由随机电位接管,忽略。 */
 function layoutStatic(): { placements: Placement[]; ignoredKinds: string[] } {
   const placements: Placement[] = [];
   const ignored = new Set<string>();
   for (const p of LAYOUT.placements) {
-    if (p.kind === 'bookshelf' || p.kind === 'column' || p.kind === 'readingTable') {
+    if (p.kind === 'bookshelf' || p.kind === 'column' || p.kind === 'readingTable' || p.kind === 'wallBlock') {
       placements.push({ kind: p.kind, x: p.x, z: p.z, rotY: rotRad(p.rotY) });
-    } else if (p.kind === 'wallSocket' || p.kind === 'endPanelBox' || p.kind === 'wallBlock') {
+    } else if (p.kind === 'wallSocket' || p.kind === 'endPanelBox') {
       ignored.add(p.kind);
     }
   }
@@ -358,7 +364,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
 
   // Floor — 实拍:浅灰米色抛光地,强反光
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(FLOOR_W, FLOOR_D),
+    new THREE.PlaneGeometry(ROOM_W, ROOM_H),
     new THREE.MeshStandardMaterial({ color: 0xc9c4b4, roughness: 0.3, metalness: 0 }),
   );
   floor.rotation.x = -Math.PI / 2;
@@ -383,12 +389,12 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     new THREE.MeshBasicMaterial({ color: 0xeaf4ff }),
   );
   windowGlow.rotation.y = -Math.PI / 2;
-  windowGlow.position.set(15.95, 1.9, -3);
+  windowGlow.position.set(HALF_W - 0.05, 1.9, -3);
   scene.add(windowGlow);
   const mullionMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.5, metalness: 0.3 });
   for (const z of [-9, -6, -3, 0, 3]) {
     const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.1), mullionMat);
-    mullion.position.set(15.93, 1.9, z);
+    mullion.position.set(HALF_W - 0.07, 1.9, z);
     scene.add(mullion);
   }
 
@@ -396,31 +402,32 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.75, metalness: 0 });
   const WALL_H = 3.2;
   const WALL_T = 0.2;
-  const WALL_SEGMENTS: ReadonlyArray<readonly [number, number, number, number]> = [
-    // [cx, cz, w, d]
-    [0, -12 + WALL_T / 2, FLOOR_W, WALL_T],  // 北(实墙)
-    [0, 12 - WALL_T / 2, FLOOR_W, WALL_T],   // 南
-    [-16 + WALL_T / 2, 0, WALL_T, FLOOR_D],  // 西
-    [16 - WALL_T / 2, 7.5, WALL_T, 9],       // 东-南段(窗 z∈[-9,3] 以南)
-    [16 - WALL_T / 2, -10.5, WALL_T, 3],     // 东-北段
+  // 按 layout.room 生成:北/南/西整面墙,东墙留窗洞 z∈[-9,3](窗墙)
+  const wallSegs: Array<[number, number, number, number]> = [
+    [0, -HALF_H + WALL_T / 2, ROOM_W, WALL_T],                    // 北(实墙)
+    [0, HALF_H - WALL_T / 2, ROOM_W, WALL_T],                     // 南
+    [-HALF_W + WALL_T / 2, 0, WALL_T, ROOM_H],                    // 西
+    [HALF_W - WALL_T / 2, (3 + HALF_H) / 2, WALL_T, Math.max(0, HALF_H - 3)],   // 东-南段(窗 z∈[-9,3] 以南)
+    [HALF_W - WALL_T / 2, (-9 - HALF_H) / 2, WALL_T, Math.max(0, HALF_H - 9)],  // 东-北段
   ];
-  for (const [cx, cz, w, d] of WALL_SEGMENTS) {
+  for (const [cx, cz, w, d] of wallSegs) {
+    if (d <= 0) continue;
     const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), wallMat);
     // 下沉 0.01:墙底埋入地板、墙顶低于天花板,消除两处共面 z-fighting(闪烁)
     wall.position.set(cx, WALL_H / 2 - 0.01, cz);
     scene.add(wall);
   }
-  // 东窗下槛 + 窗上楣
+  // 东窗下槛 + 窗上楣(位置跟随东墙)
   const sill = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.8, 12), wallMat);
-  sill.position.set(15.9, 0.4, -3);
+  sill.position.set(HALF_W - 0.1, 0.4, -3);
   scene.add(sill);
   const header = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, 0.4, 12), wallMat);
-  header.position.set(15.9, 3.2, -3);
+  header.position.set(HALF_W - 0.1, 3.2, -3);
   scene.add(header);
 
   // PR #13 #7 天花板:米黄,顶到墙高 3.2m(朝下)。debug overlay 加 top-down 相机时需 toggle visible(留 PR #14)。
   const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xe6d5a8, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_W, FLOOR_D), ceilingMat);
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W, ROOM_H), ceilingMat);
   ceiling.rotation.x = Math.PI / 2;  // 朝下
   ceiling.position.y = WALL_H;       // 顶到墙高
   scene.add(ceiling);
@@ -430,12 +437,12 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   // 发光面用 DoubleSide —— 南墙窗 rotY=0 面朝外,单面材质从室内不可见。
   const windowGlowMat = new THREE.MeshBasicMaterial({ color: 0xeaf4ff, side: THREE.DoubleSide });
   const windowConfigs: Array<{ pos: [number, number, number]; rotY: number; w: number; h: number }> = [
-    { pos: [-3, 1.9, -11.9], rotY: 0, w: 4, h: 2 },      // 北 1
-    { pos: [3, 1.9, -11.9], rotY: 0, w: 4, h: 2 },       // 北 2
-    { pos: [-3, 1.9, 11.9], rotY: 0, w: 4, h: 2 },       // 南 1
-    { pos: [3, 1.9, 11.9], rotY: 0, w: 4, h: 2 },        // 南 2
-    { pos: [-15.9, 1.9, -3], rotY: Math.PI / 2, w: 4, h: 2 },  // 西 1
-    { pos: [-15.9, 1.9, 3], rotY: Math.PI / 2, w: 4, h: 2 },   // 西 2
+    { pos: [-3, 1.9, -HALF_H + 0.1], rotY: 0, w: 4, h: 2 },      // 北 1
+    { pos: [3, 1.9, -HALF_H + 0.1], rotY: 0, w: 4, h: 2 },       // 北 2
+    { pos: [-3, 1.9, HALF_H - 0.1], rotY: 0, w: 4, h: 2 },       // 南 1
+    { pos: [3, 1.9, HALF_H - 0.1], rotY: 0, w: 4, h: 2 },        // 南 2
+    { pos: [-HALF_W + 0.1, 1.9, -3], rotY: Math.PI / 2, w: 4, h: 2 },  // 西 1
+    { pos: [-HALF_W + 0.1, 1.9, 3], rotY: Math.PI / 2, w: 4, h: 2 },   // 西 2
   ];
   for (const cfg of windowConfigs) {
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(cfg.w, cfg.h), windowGlowMat);
@@ -468,7 +475,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   const colliders: THREE.Box3[] = [];
   const staticColliders: THREE.Box3[] = [];   // 永驻;rebuild 不动
   const tableColliders: THREE.Box3[] = [];     // 每次 rebuild 清空重建
-  const COLLIDER_KINDS = new Set<ModelKind>(['bookshelf', 'column', 'studyTable', 'studyTable-charge', 'readingTable']);
+  const COLLIDER_KINDS = new Set<ModelKind>(['bookshelf', 'column', 'studyTable', 'studyTable-charge', 'readingTable', 'wallBlock']);
 
   // Box3Helper:静态 + 桌区各自维护,scene.add 通常 visible=false
   let showHelpers = false;
