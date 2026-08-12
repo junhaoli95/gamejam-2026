@@ -219,6 +219,7 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
       <div class="row"><label>坐标</label><span class="propval"><b id="propX"></b>, <b id="propZ"></b></span></div>
       <div class="row" id="propRotRow"><label>朝向</label><span class="propval" id="propRot"></span></div>
       <div class="row">
+        <button type="button" class="smallbtn" id="rotateBtn" title="切换横/竖(90°)">旋转 90°</button>
         <button type="button" class="smallbtn" id="nudgeXm">x-0.5</button>
         <button type="button" class="smallbtn" id="nudgeXp">x+0.5</button>
         <button type="button" class="smallbtn" id="nudgeZm">z-0.5</button>
@@ -229,8 +230,8 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 
     <div id="help">
       左键拖 = 批量放置 · 拖已有元素 = 移动(0.5m)<br>
-      Shift+拖 B 切横/竖 · 右键删 · 橡皮批量清<br>
-      点元素看属性 · 数字 1~6 选笔刷<br>
+      <b>旋转 90°:Shift+点击放置 或 选中后点"旋转 90°"</b><br>
+      右键删 · 橡皮批量清 · 数字 1~6 选笔刷<br>
       Ctrl+Z 撤销 · ★ 画笔保留,游戏侧未实现<br>
       R/S/E = readingTable/wallSocket/端板盒<br>
       <button id="resetBtn" type="button" class="smallbtn" style="margin-top:6px">重置为初始布局(清本地历史)</button>
@@ -872,11 +873,14 @@ function renderProps() {
   document.getElementById('propX').textContent = el.x;
   document.getElementById('propZ').textContent = el.z;
   const rotRow = document.getElementById('propRotRow');
+  const rotateBtn = document.getElementById('rotateBtn');
   if (b && b.rotatable) {
     rotRow.style.display = '';
+    rotateBtn.style.display = '';
     document.getElementById('propRot').textContent = el.rotY ? '竖(rotY=90°)' : '横(rotY=0°)';
   } else {
     rotRow.style.display = 'none';
+    rotateBtn.style.display = 'none';
   }
 }
 
@@ -889,6 +893,17 @@ function nudgeSelected(dx, dz) {
   refresh();
   pushHistory(snapshot());
 }
+
+document.getElementById('rotateBtn').addEventListener('click', () => {
+  if (!selectedEl) return;
+  const b = BRUSHES.find(x => x.kind === selectedEl.kind) || EXTRA_KINDS[selectedEl.kind];
+  if (!b || !b.rotatable) return;
+  selectedEl.rotY = selectedEl.rotY ? 0 : 1;
+  placeElDiv(selectedEl);
+  refresh();
+  pushHistory(snapshot());
+  setStatus('已旋转 90°(' + (selectedEl.rotY ? '竖' : '横') + ')');
+});
 
 document.getElementById('nudgeXm').addEventListener('click', () => nudgeSelected(-0.5, 0));
 document.getElementById('nudgeXp').addEventListener('click', () => nudgeSelected(0.5, 0));
@@ -1252,23 +1267,40 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 
 buildBrushes();
 buildAxis();
-let stored = null;
-try { stored = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (err) { stored = null; }
-if (stored && stored.state) {
-  historyStack = stored.history || [];
-  redoStack = stored.redo || [];
-  applyState(stored.state);
-  setStatus('已恢复上次会话(重置按钮可回到初始布局)');
-} else {
-  loadInitialLayout();
-  syncSimInputs();
-  updateHint();
-  refresh();
-  setStatus('已加载当前游戏布局(20 桌)');
+async function initLayout() {
+  // 服务器优先:所有浏览器打开都看到游戏当前布局(单一真源 layout.json)
+  let serverLayout = null;
+  try {
+    const r = await fetch(SERVER + '/layout', { mode: 'cors' });
+    if (r.ok) serverLayout = await r.json();
+  } catch (err) { serverLayout = null; }
+  if (serverLayout) {
+    historyStack = [];
+    redoStack = [];
+    applyState(stateFromJson(serverLayout));
+    setStatus('已加载游戏当前布局(服务器 layout.json)');
+  } else {
+    let stored = null;
+    try { stored = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (err) { stored = null; }
+    if (stored && stored.state) {
+      historyStack = stored.history || [];
+      redoStack = stored.redo || [];
+      applyState(stored.state);
+      setStatus('服务器离线,已恢复本地会话');
+    } else {
+      loadInitialLayout();
+      syncSimInputs();
+      updateHint();
+      refresh();
+      setStatus('已加载初始布局(服务器离线)');
+    }
+  }
+  if (historyStack.length === 0) historyStack.push(snapshot());
+  updateHistoryBtns();
+  refreshSaveState();
+  setInterval(refreshSaveState, 5000);
 }
-if (historyStack.length === 0) historyStack.push(snapshot());
-updateHistoryBtns();
-refreshSaveState();
+initLayout();
 </script>
 </body>
 </html>
