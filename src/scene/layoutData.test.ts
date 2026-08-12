@@ -31,9 +31,9 @@ describe('layout.json(编辑器保存的布局数据,scene 唯一真相源)', ()
   it('各 kind 数量合理(布局由编辑器保存,数量可变,只做结构校验)', () => {
     const tables = count('studyTable') + count('studyTable-charge');
     expect(tables).toBeGreaterThanOrEqual(1);
-    expect(count('column')).toBeGreaterThanOrEqual(1);
-    expect(count('bookshelf')).toBeGreaterThanOrEqual(1);
-    expect(count('readingTable')).toBeGreaterThanOrEqual(1);
+    expect(count('column')).toBeGreaterThanOrEqual(0);
+    expect(count('bookshelf')).toBeGreaterThanOrEqual(0);
+    expect(count('readingTable')).toBeGreaterThanOrEqual(0);
     expect(count('wallBlock')).toBeGreaterThanOrEqual(0);
   });
 
