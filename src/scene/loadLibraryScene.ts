@@ -738,24 +738,28 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     tableColliders.push(tableBox);
     pushTableHelper(tableBox);
 
-    // PR #13 #4:桌面中线 2 电位 → 合并成 1 个 table-level outlet(中心 = 桌中心)。
-    // 视觉 2 个 mesh 共享同一 occupied 状态;4 座位都坐猫 = 占(红),1-3 空 = 空(绿)。
+    // 桌面中线 2 电位相互独立(左半/右半各 2 把椅子)
+    // outletA: xo=-0.45 → 对应 si=0,1;outletB: xo=+0.45 → 对应 si=2,3
     // 桌整体朝向:rotY=90° 时桌+电位+椅+猫整体旋转(长边沿 z)
     const tableRot = p.rotY ?? 0;
     const cosR = Math.cos(tableRot);
     const sinR = Math.sin(tableRot);
     const tableH = dim.h;
-    outletPositions.push({ x: p.x, z: p.z, occupied: false });
-    const outletGroup: THREE.Mesh[] = [];
-    for (const ox of STUDY_OUTLET_OFFSETS) {
+    const studyOutletIdxs: number[] = [];
+    for (let oi = 0; oi < STUDY_OUTLET_OFFSETS.length; oi++) {
+      const ox = STUDY_OUTLET_OFFSETS[oi];
       const sq = new THREE.Mesh(studyOutletGeo, outletMatEmpty);
       sq.position.set(p.x + ox * cosR, tableH + 0.011, p.z + ox * sinR);
       tableZone.add(sq);
-      outletGroup.push(sq);
+      outletPositions.push({ x: p.x + ox * cosR, z: p.z + ox * sinR, occupied: false });
+      outletMeshGroups.push([sq]);
+      const outletIdx = outletPositions.length - 1;
+      studyOutletIdxs.push(outletIdx);
+      if (isCharge) chargeOutletIndexes.add(outletIdx);
+      // 本 outlet 对应椅子 si = oi*2 / oi*2+1(按下面 seatKeys push 顺序)
+      const keysForOutlet = [`${tableIdx},${oi * 2}`, `${tableIdx},${oi * 2 + 1}`];
+      tableOutletSeatKeys.push(keysForOutlet);
     }
-    outletMeshGroups.push(outletGroup);
-    const outletIdx = outletPositions.length - 1;
-    if (isCharge) chargeOutletIndexes.add(outletIdx);
 
     // 4 椅 + 4 座位猫(椅位局部偏移 (xo, side*seatSideDist) 随桌整体旋转)
     let si = 0;
@@ -791,13 +795,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
         si++;
       }
     }
-    // 4 座位都坐猫 = 桌桩占(红);任意空椅 = 空(绿);★ 摸奖桌恒空
-    const tableOccupied = !isCharge && seatKeys.every(k => !freeSeats.has(k));
-    outletPositions[outletIdx].occupied = tableOccupied;
-    tableOutletSeatKeys.push(seatKeys);
-    if (tableOccupied) {
-      for (const m of outletGroup) m.material = outletMatOccupied;
-    }
+    // 每桌 2 独立 outlet,每个对应桌半边 2 把椅子;occupied 由 randomizeOccupiedOutlets 决定
+    // ★ 摸奖桌 2 个 outlet 都恒空(绿)— 在 randomizeOccupiedOutlets 中跳过
   }
 
   const studyOutletGeo = new THREE.BoxGeometry(0.2, 0.02, 0.2);
@@ -912,27 +911,47 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       outletPositions[i].occupied = false;
       for (const m of outletMeshGroups[i]) m.material = outletMatEmpty;
     }
-    // table-level outlet:每局绿桩总数 = round(自习桌 × rate),按空椅数加权选桌
-    // 空椅 0 的桌权重 0(不参与),空椅 1+ 的桌按 freeSeatWeights 优先被选
+    // table-level outlet:每局绿桩总数 = round(自习桌数 × rate),每桌最多 1 个绿(outlet 级)
+    // 按空椅数加权选桌:空椅 0 桌权重 0,空椅 1+ 桌按 freeSeatWeights 优先被选
     // ★ 摸奖桌恒绿跳过(chargeOutletIndexes)
     const studyOutletIdxs: number[] = [];
     for (let i = 0; i < outletPositions.length; i++) {
-      if (tableOutletSeatKeys[i] && !chargeOutletIndexes.has(i)) studyOutletIdxs.push(i);
+      if (tableOutletSeatKeys[i] && !chargeOutletIndexes.has(i)) {
+        studyOutletIdxs.push(i);
+      }
     }
+    // 桌数 = studyOutletIdxs / 2(每桌 2 个 outlet)
+    const tableN = Math.ceil(studyOutletIdxs.length / 2);
     const greenCount = Math.min(
       studyOutletIdxs.length,
-      Math.max(0, Math.round(studyOutletIdxs.length * (LAYOUT.outlets.studyTableGreenRate ?? CONFIG.charging.studyTableGreenRate))),
+      Math.max(0, Math.round(tableN * (LAYOUT.outlets.studyTableGreenRate ?? CONFIG.charging.studyTableGreenRate))),
     );
     if (studyOutletIdxs.length > 0 && greenCount > 0) {
-      const weights = studyOutletIdxs.map(i => {
-        const keys = tableOutletSeatKeys[i]!;
-        const freeN = keys.filter(k => freeSeats.has(k)).length;
+      // 按桌分组,按桌内空椅总数算权重 → 选 N 张桌 → 每张选 1 个 outlet 变绿
+      const outletByTable = new Map<number, number[]>();
+      for (const i of studyOutletIdxs) {
+        const key = tableOutletSeatKeys[i]![0].split(',')[0];
+        const t = parseInt(key, 10);
+        if (!outletByTable.has(t)) outletByTable.set(t, []);
+        outletByTable.get(t)!.push(i);
+      }
+      const tableArr = Array.from(outletByTable.entries());
+      const tableWeights = tableArr.map(([_t, outs]) => {
+        const freeN = outs.reduce((acc, i) => acc + tableOutletSeatKeys[i]!.filter(k => freeSeats.has(k)).length, 0);
         return CONFIG.charging.freeSeatWeights[freeN] ?? 0;
       });
       const rng = mulberry32(seed ^ 0x5eed);
-      const chosen = weightedPickByWeight(weights, greenCount, rng);
+      const chosenTables = weightedPickByWeight(tableWeights, greenCount, rng);
       const chosenOutlets = new Set<number>();
-      for (const w of chosen) chosenOutlets.add(studyOutletIdxs[w]);
+      let tableIdx = 0;
+      for (const entry of tableArr) {
+        if (chosenTables.has(tableIdx)) {
+          const outs = entry[1];
+          const pick = outs[Math.floor(rng() * outs.length)];
+          chosenOutlets.add(pick);
+        }
+        tableIdx++;
+      }
       for (const i of chosenOutlets) {
         outletPositions[i].occupied = false;  // 绿
       }
