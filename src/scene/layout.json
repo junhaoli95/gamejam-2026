@@ -17,237 +17,190 @@
   "placements": [
     {
       "kind": "bookshelf",
-      "x": -13,
-      "z": -7,
+      "x": 0,
+      "z": -9,
       "rotY": 90
     },
     {
       "kind": "bookshelf",
-      "x": -13,
-      "z": 1,
-      "rotY": 90
-    },
-    {
-      "kind": "endPanelBox",
-      "x": -13,
-      "z": -9
-    },
-    {
-      "kind": "bookshelf",
-      "x": -9.5,
-      "z": -7,
-      "rotY": 90
-    },
-    {
-      "kind": "bookshelf",
-      "x": -9.5,
-      "z": -3,
-      "rotY": 90
-    },
-    {
-      "kind": "bookshelf",
-      "x": -6,
-      "z": -3,
-      "rotY": 90
-    },
-    {
-      "kind": "bookshelf",
-      "x": -6,
-      "z": 1,
-      "rotY": 90
-    },
-    {
-      "kind": "endPanelBox",
-      "x": -6,
-      "z": -9
-    },
-    {
-      "kind": "column",
-      "x": -13,
-      "z": -9
-    },
-    {
-      "kind": "column",
-      "x": -13,
-      "z": -5
-    },
-    {
-      "kind": "column",
-      "x": -13,
-      "z": -1
-    },
-    {
-      "kind": "column",
-      "x": -13,
-      "z": 3
-    },
-    {
-      "kind": "column",
-      "x": -9.5,
-      "z": -9
-    },
-    {
-      "kind": "column",
-      "x": -9.5,
-      "z": -5
-    },
-    {
-      "kind": "column",
-      "x": -9.5,
-      "z": -1
-    },
-    {
-      "kind": "column",
-      "x": -9.5,
-      "z": 3
-    },
-    {
-      "kind": "column",
-      "x": -6,
-      "z": -9
-    },
-    {
-      "kind": "column",
-      "x": -6,
-      "z": -5
-    },
-    {
-      "kind": "column",
-      "x": -6,
-      "z": -1
-    },
-    {
-      "kind": "column",
-      "x": -6,
-      "z": 3
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": -10.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": -8.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": -6
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": -3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": -1
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": 1
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": 3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": 6
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": 8.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 7,
-      "z": 10.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": -10.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": -8.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": -6
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": -3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": -1
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": 1
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": 3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": 6
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": 8.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 10,
-      "z": 10.5
-    },
-    {
-      "kind": "readingTable",
-      "x": 14,
+      "x": 0,
       "z": -6,
       "rotY": 90
     },
     {
-      "kind": "readingTable",
-      "x": 14,
-      "z": -2,
-      "rotY": 90
-    },
-    {
-      "kind": "wallSocket",
-      "x": -8,
-      "z": 11.5
-    },
-    {
-      "kind": "wallSocket",
-      "x": 14,
-      "z": 11.5
-    },
-    {
-      "kind": "wallSocket",
-      "x": -15.5,
+      "kind": "bookshelf",
+      "x": 0,
       "z": 0,
       "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 0,
+      "z": 3,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -12,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": -9,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": -3,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": 3,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": 6,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": 9,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": 12,
+      "z": 0,
+      "rotY": 0
+    },
+    {
+      "kind": "studyTable",
+      "x": -9,
+      "z": -8.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -5,
+      "z": -8.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -9,
+      "z": -4.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -5,
+      "z": -4.5
+    },
+    {
+      "kind": "studyTable",
+      "x": 9,
+      "z": -9
+    },
+    {
+      "kind": "studyTable",
+      "x": 5,
+      "z": -9
+    },
+    {
+      "kind": "studyTable",
+      "x": 9,
+      "z": -5
+    },
+    {
+      "kind": "studyTable",
+      "x": 5,
+      "z": -5
+    },
+    {
+      "kind": "studyTable-charge",
+      "x": 7,
+      "z": -2.6
+    },
+    {
+      "kind": "studyTable",
+      "x": -9,
+      "z": 3.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -5,
+      "z": 3.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -9,
+      "z": 7.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -5,
+      "z": 7.5
+    },
+    {
+      "kind": "studyTable",
+      "x": 9,
+      "z": 3.5
+    },
+    {
+      "kind": "studyTable",
+      "x": 5,
+      "z": 3.5
+    },
+    {
+      "kind": "studyTable",
+      "x": 9,
+      "z": 7.5
+    },
+    {
+      "kind": "studyTable",
+      "x": 5,
+      "z": 7.5
+    },
+    {
+      "kind": "column",
+      "x": -14,
+      "z": 10.5
+    },
+    {
+      "kind": "column",
+      "x": 14,
+      "z": 10.5
+    },
+    {
+      "kind": "column",
+      "x": -14,
+      "z": -10.5
+    },
+    {
+      "kind": "column",
+      "x": 14,
+      "z": -10.5
+    },
+    {
+      "kind": "column",
+      "x": 0,
+      "z": -2.5
+    },
+    {
+      "kind": "column",
+      "x": 0,
+      "z": -11.5
     }
   ]
 }
