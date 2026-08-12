@@ -157,6 +157,7 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 }
 .sim-dot { width: 5px; height: 5px; background: #2dff7a; box-shadow: 0 0 3px #2dff7a; }
 .sim-cand { width: 3px; height: 3px; background: #56636e; }
+.sim-green { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 2px solid #2dff7a; border-radius: 50%; box-shadow: 0 0 6px #2dff7a; pointer-events: none; z-index: 3; }
 
 #out { flex: 1; min-width: 360px; }
 #out h2 { font-size: 12px; margin: 0 0 6px; color: #9aa3b2; font-weight: 600; }
@@ -216,6 +217,9 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
       </div>
       <div class="row">
         <label for="simWallMin">墙</label><input id="simWallMin" type="number" min="0" max="26" aria-label="墙壁插最少"><label for="simWallMax" style="width:auto">~</label><input id="simWallMax" type="number" min="0" max="26" aria-label="墙壁插最多"><span class="unit">个</span>
+      </div>
+      <div class="row">
+        <label for="simGreenRate">自习桌绿桩率</label><input id="simGreenRate" type="number" min="0" max="1" step="0.01" aria-label="自习桌绿桩占比"><span class="unit">· 绿桩 <b id="simGreenN">0</b> 个</span>
       </div>
       <div id="simInfo">seed 12345 · 柱 0/0 · 墙 0/0 · 总桩 0</div>
     </div>
@@ -355,7 +359,7 @@ let drag = null;
 let seq = 0;
 let selectedEl = null;
 
-let sim = { seed: 12345, columnMin: 4, columnMax: 6, wallMin: 2, wallMax: 4, fixSeed: false };
+let sim = { seed: 12345, columnMin: 4, columnMax: 6, wallMin: 2, wallMax: 4, fixSeed: false, greenRate: 0.05 };
 let defaultRot = 0;  // 默认朝向:0=横,1=竖(对所有可旋转元素生效)
 
 let historyStack = [];
@@ -856,7 +860,9 @@ function refresh() {
   renderProps();
   const n = elements.length;
   const stars = elements.filter(e => e.kind === '★').length;
-  countEl.innerHTML = '元素: <b>' + n + '</b> 个 · ★: <b>' + stars + '</b> 个 · 电位(此局): <b>' + outletTotal() + '</b>';
+  const studyN = elements.filter(e => e.kind === 'T').length;
+  const greenN = Math.round(studyN * sim.greenRate);
+  countEl.innerHTML = '元素: <b>' + n + '</b> 个 · ★: <b>' + stars + '</b> 个 · 电位(此局): <b>' + outletTotal() + '</b> · 绿桩(确定 <b>' + greenN + '</b>/' + studyN + ')';
 }
 
 // ── 电位模拟(与游戏同算法:mulberry32 + Fisher-Yates,PR-B 移植到 scene)──
@@ -920,7 +926,7 @@ function simDraw() {
 }
 
 function renderSim() {
-  canvas.querySelectorAll('.sim-dot, .sim-cand').forEach(d => d.remove());
+  canvas.querySelectorAll('.sim-dot, .sim-cand, .sim-green').forEach(d => d.remove());
   const draw = simDraw();
   const hw = halfW(), hh = halfH();
   const dotAt = (x, z, cls) => {
@@ -933,10 +939,26 @@ function renderSim() {
   for (const cand of wallCandidates(ROOM_W, ROOM_H)) dotAt(cand.x, cand.z, 'sim-cand');
   for (const w of draw.walls) dotAt(w.x, w.z, 'sim-dot');
   for (const c of draw.columns) dotAt(c.x + columnFace(c.x) * 0.46, c.z, 'sim-dot');
+
+  const studyEls = elements.filter(e => e.kind === 'T');
+  const studyN = studyEls.length;
+  const greenN = Math.min(studyN, Math.max(0, Math.round(studyN * sim.greenRate)));
+  const orders = studyEls.map((_, i) => i);
+  const rng = mulberry32(sim.seed ^ 0x5eed);
+  for (let i = orders.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [orders[i], orders[j]] = [orders[j], orders[i]];
+  }
+  for (let k = 0; k < greenN; k++) {
+    const t = studyEls[orders[k]];
+    dotAt(t.x, t.z, 'sim-green');
+  }
+
   const tables = elements.filter(e => e.kind === 'T' || e.kind === '★').length;
   document.getElementById('simInfo').textContent =
     'seed ' + sim.seed + ' · 柱 ' + draw.columnCount + '/' + elements.filter(e => e.kind === 'C').length +
     ' · 墙 ' + draw.wallCount + ' · 总桩 ' + (tables + draw.columnCount + draw.wallCount) + '(含桌 ' + tables + ')';
+  document.getElementById('simGreenN').textContent = greenN;
 }
 
 // ── 选中元素属性面板 ──
@@ -1092,6 +1114,7 @@ const simColMin = document.getElementById('simColMin');
 const simColMax = document.getElementById('simColMax');
 const simWallMin = document.getElementById('simWallMin');
 const simWallMax = document.getElementById('simWallMax');
+const simGreenRate = document.getElementById('simGreenRate');
 
 function syncSimInputs() {
   simSeedInput.value = sim.seed;
@@ -1100,6 +1123,7 @@ function syncSimInputs() {
   simColMax.value = sim.columnMax;
   simWallMin.value = sim.wallMin;
   simWallMax.value = sim.wallMax;
+  simGreenRate.value = sim.greenRate;
 }
 
 function simChanged() {
@@ -1109,6 +1133,7 @@ function simChanged() {
   sim.columnMax = Math.max(sim.columnMin, Math.min(12, parseInt(simColMax.value, 10) || 0));
   sim.wallMin = Math.max(0, Math.min(26, parseInt(simWallMin.value, 10) || 0));
   sim.wallMax = Math.max(sim.wallMin, Math.min(26, parseInt(simWallMax.value, 10) || 0));
+  sim.greenRate = Math.max(0, Math.min(1, parseFloat(simGreenRate.value) || 0));
   syncSimInputs();
   refresh();
   pushHistory(snapshot());
@@ -1120,6 +1145,7 @@ simColMin.addEventListener('change', simChanged);
 simColMax.addEventListener('change', simChanged);
 simWallMin.addEventListener('change', simChanged);
 simWallMax.addEventListener('change', simChanged);
+simGreenRate.addEventListener('change', simChanged);
 document.getElementById('simDice').addEventListener('click', () => {
   simSeedInput.value = Math.floor(Math.random() * 0x7fffffff);
   simChanged();
@@ -1180,6 +1206,7 @@ function buildJson() {
       columnCount: [sim.columnMin, sim.columnMax],
       wallCount: [sim.wallMin, sim.wallMax],
       seed: sim.fixSeed ? sim.seed : null,
+      studyTableGreenRate: sim.greenRate,
     },
     placements: elements.map(e => {
       const p = { kind: KIND_NAMES[e.kind] || e.kind, x: e.x, z: e.z };
@@ -1208,6 +1235,7 @@ function stateFromJson(j) {
       columnMin: cc[0], columnMax: cc[1],
       wallMin: wc[0], wallMax: wc[1],
       fixSeed: typeof o.seed === 'number',
+      greenRate: typeof o.studyTableGreenRate === 'number' ? o.studyTableGreenRate : sim.greenRate,
     },
     elements: j.placements.map(p => ({
       kind: KIND_BY_NAME[p.kind] || p.kind,
