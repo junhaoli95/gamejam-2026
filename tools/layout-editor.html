@@ -83,6 +83,7 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 }
 .smallbtn:hover:not(:disabled) { background: #333b47; }
 .smallbtn:disabled { opacity: 0.4; cursor: default; }
+.smallbtn.active { background: #2e3b4f; border-color: #4f8cc9; outline: 1px solid #4f8cc9; }
 #simInfo { margin-top: 6px; font-size: 11px; color: #2dff7a; line-height: 1.6; }
 #histList { margin-top: 6px; max-height: 140px; overflow-y: auto; font-size: 11px; line-height: 1.8; }
 #histList .histrow { display: flex; gap: 6px; align-items: center; }
@@ -193,6 +194,15 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
       <div style="color:#6b7480">修改立即扩展画布(中心保持 0,0)</div>
     </div>
 
+    <div id="rotBox" class="box">
+      <b>默认朝向(所有元素)</b>
+      <div class="row">
+        <button type="button" id="defRotH" class="smallbtn">横</button>
+        <button type="button" id="defRotV" class="smallbtn">竖</button>
+        <span class="unit">Shift 点击临时取反</span>
+      </div>
+    </div>
+
     <div id="simBox" class="box">
       <b>电位模拟(每局随机)</b>
       <div class="row">
@@ -255,11 +265,11 @@ const CELL = 24;
 let ROOM_W = 32, ROOM_H = 24;
 
 const BRUSHES = [
-  { kind: 'T', char: 'T', name: '自习桌', bodyW: 1.8, bodyD: 1.2, chairW: 0.95, chairOff: 1.375, cls: 'table' },
-  { kind: '★', char: '★', name: '摸奖桌', bodyW: 1.8, bodyD: 1.2, chairW: 0.95, chairOff: 1.375, cls: 'charge' },
-  { kind: 'C', char: 'C', name: '柱', bodyW: 0.9, bodyD: 0.9, cls: 'column' },
+  { kind: 'T', char: 'T', name: '自习桌', bodyW: 1.8, bodyD: 1.2, chairW: 0.95, chairOff: 1.375, rotatable: true, cls: 'table' },
+  { kind: '★', char: '★', name: '摸奖桌', bodyW: 1.8, bodyD: 1.2, chairW: 0.95, chairOff: 1.375, rotatable: true, cls: 'charge' },
+  { kind: 'C', char: 'C', name: '柱', bodyW: 0.9, bodyD: 0.9, rotatable: true, cls: 'column' },
   { kind: 'B', char: 'B', name: '书架', bodyW: 3.0, bodyD: 0.6, rotatable: true, cls: 'shelf' },
-  { kind: '#', char: '#', name: '墙体', bodyW: 1.0, bodyD: 1.0, cls: 'wall' },
+  { kind: '#', char: '#', name: '墙体', bodyW: 1.0, bodyD: 1.0, rotatable: true, cls: 'wall' },
   { kind: '', char: '⌫', name: '走道(橡皮)', eraser: true },
 ];
 
@@ -343,6 +353,7 @@ let seq = 0;
 let selectedEl = null;
 
 let sim = { seed: 12345, columnMin: 4, columnMax: 6, wallMin: 2, wallMax: 4, fixSeed: false };
+let defaultRot = 0;  // 默认朝向:0=横,1=竖(对所有可旋转元素生效)
 
 let historyStack = [];
 let redoStack = [];
@@ -523,7 +534,11 @@ function stampCell(c, r) {
     return a.c === c && a.r === r;
   });
   if (occupied) return;
-  const el = addElement(brush.kind, m.x, m.z, eShiftAtDown ? 1 : 0);
+  const brushDef = BRUSHES.find(x => x.kind === brush.kind) || EXTRA_KINDS[brush.kind];
+  const rotY = brushDef && brushDef.rotatable
+    ? (eShiftAtDown ? 1 - defaultRot : defaultRot)
+    : 0;
+  const el = addElement(brush.kind, m.x, m.z, rotY);
   if (brush.kind === '★') {
     const stars = elements.filter(x => x.kind === '★').length;
     if (stars > 2) setStatus('⚠ ★ 已 ' + stars + ' 个,规格限 1~2 个');
@@ -923,6 +938,7 @@ function snapshot() {
     roomW: ROOM_W,
     roomH: ROOM_H,
     sim: { ...sim },
+    defaultRot,
     elements: elements.map(e => ({ kind: e.kind, x: e.x, z: e.z, rotY: e.rotY })),
   };
 }
@@ -949,6 +965,9 @@ function applyState(s) {
   ROOM_W = s.roomW;
   ROOM_H = s.roomH;
   sim = { ...s.sim };
+  if (typeof s.defaultRot === 'number') defaultRot = s.defaultRot;
+  else if (typeof s.defaultShelfRot === 'number') defaultRot = s.defaultShelfRot;
+  syncRotBtns();
   document.getElementById('sizeW').value = ROOM_W;
   document.getElementById('sizeH').value = ROOM_H;
   canvas.style.width = (ROOM_W * CELL) + 'px';
@@ -1030,6 +1049,23 @@ document.getElementById('simDice').addEventListener('click', () => {
   simChanged();
   setStatus('新 seed: ' + simSeedInput.value);
 });
+
+// ── 默认朝向 ──
+
+function syncRotBtns() {
+  document.getElementById('defRotH').classList.toggle('active', defaultRot === 0);
+  document.getElementById('defRotV').classList.toggle('active', defaultRot === 1);
+}
+
+function setDefaultShelfRot(v) {
+  if (defaultRot === v) return;
+  defaultRot = v;
+  syncRotBtns();
+  pushHistory(snapshot());
+  setStatus('默认' + (v ? '竖放' : '横放') + '(所有可旋转元素,Shift 点击临时取反)');
+}
+document.getElementById('defRotH').addEventListener('click', () => setDefaultShelfRot(0));
+document.getElementById('defRotV').addEventListener('click', () => setDefaultShelfRot(1));
 
 // ── 区域大小 ──
 
@@ -1296,6 +1332,7 @@ async function initLayout() {
     }
   }
   if (historyStack.length === 0) historyStack.push(snapshot());
+  syncRotBtns();
   updateHistoryBtns();
   refreshSaveState();
   setInterval(refreshSaveState, 5000);
