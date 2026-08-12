@@ -180,40 +180,6 @@ function computeFreeSeats(count: number, seed: number): Set<string> {
   return new Set(all.slice(0, Math.max(0, Math.min(count, all.length))));
 }
 
-/**
- * 加权无放回选 N 个:权重越高越优先。返回选中索引 Set。
- * 权重 0 的项永不被选(除非候选全为 0 且 N>0,则 fallback 均匀选)。
- */
-function weightedPickByWeight(weights: number[], n: number, rng: () => number): Set<number> {
-  const N = weights.length;
-  const out = new Set<number>();
-  if (N === 0 || n <= 0) return out;
-  const k = Math.min(n, N);
-  const idxs = Array.from({ length: N }, (_, i) => i);
-  const totalW = weights.reduce((a, b) => a + b, 0);
-  if (totalW <= 0) {
-    for (let i = N - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
-    }
-    for (let i = 0; i < k; i++) out.add(idxs[i]);
-    return out;
-  }
-  const arr = idxs.slice();
-  for (let pick = 0; pick < k; pick++) {
-    const remaining = arr.filter(i => !out.has(i));
-    const w = remaining.reduce((a, i) => a + (weights[i] >= 0 ? weights[i] : 0), 0);
-    let r = rng() * w;
-    let chosen = remaining[0];
-    for (const i of remaining) {
-      r -= Math.max(0, weights[i]);
-      if (r <= 0) { chosen = i; break; }
-    }
-    out.add(chosen);
-  }
-  return out;
-}
-
 // ── 每局随机电位(layout.outlets 参数 + seed)──
 // 与编辑器 tools/layout-editor.html 的 drawOutlets 完全同算法/同顺序:
 // columnCount → wallCount → Fisher-Yates 洗牌柱 → 洗牌墙。face 规则同编辑器(朝房间中心)。
@@ -756,8 +722,9 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       const outletIdx = outletPositions.length - 1;
       studyOutletIdxs.push(outletIdx);
       if (isCharge) chargeOutletIndexes.add(outletIdx);
-      // 本 outlet 对应椅子 si = oi*2 / oi*2+1(按下面 seatKeys push 顺序)
-      const keysForOutlet = [`${tableIdx},${oi * 2}`, `${tableIdx},${oi * 2 + 1}`];
+      // push 顺序:side=-1: xo=-0.45(si0),xo=+0.45(si1);side=+1: xo=-0.45(si2),xo=+0.45(si3)
+      // 本 outlet 对应同 xo 的 2 把椅子:oi=0(xo=-0.45)→ si0,si2;oi=1(xo=+0.45)→ si1,si3
+      const keysForOutlet = [`${tableIdx},${oi}`, `${tableIdx},${oi + 2}`];
       tableOutletSeatKeys.push(keysForOutlet);
     }
 
@@ -911,36 +878,46 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       outletPositions[i].occupied = false;
       for (const m of outletMeshGroups[i]) m.material = outletMatEmpty;
     }
-    // table-level outlet:每局绿桩总数 = round(自习桌数 × rate),每桌最多 1 个绿(outlet 级)
-    // 按空椅数加权选桌:空椅 0 桌权重 0,空椅 1+ 桌按 freeSeatWeights 优先被选
-    // ★ 摸奖桌恒绿跳过(chargeOutletIndexes)
+    // table-level outlet:绿桩总数 = round(自习桌数 × rate),绿桩优先落在有空椅那一侧
+    // 一张桌 2 个 outlet(左/右半)— 有空椅的 outlet 才有资格变绿,无空椅的必红
+    // ★ 摸奖桌 2 outlet 都恒绿跳过
     const studyOutletIdxs: number[] = [];
     for (let i = 0; i < outletPositions.length; i++) {
       if (tableOutletSeatKeys[i] && !chargeOutletIndexes.has(i)) {
         studyOutletIdxs.push(i);
       }
     }
-    // 桌数 = studyOutletIdxs / 2(每桌 2 个 outlet)
     const tableN = Math.ceil(studyOutletIdxs.length / 2);
     const greenCount = Math.min(
       studyOutletIdxs.length,
       Math.max(0, Math.round(tableN * (LAYOUT.outlets.studyTableGreenRate ?? CONFIG.charging.studyTableGreenRate))),
     );
     if (studyOutletIdxs.length > 0 && greenCount > 0) {
-      // 直接在 outlet 级别加权选 greenCount 个变绿:每个 outlet 按 2 椅空椅数加权
-      // 允许同桌 2 个 outlet 都入选 → 2 个都绿(摸奖头奖感)
-      const weights = studyOutletIdxs.map(i => {
-        const keys = tableOutletSeatKeys[i]!;
-        const freeN = keys.filter(k => freeSeats.has(k)).length;
-        return CONFIG.charging.freeSeatWeights[freeN] ?? 0;
-      });
       const rng = mulberry32(seed ^ 0x5eed);
-      const chosenOutlets = weightedPickByWeight(weights, greenCount, rng);
-      for (let w = 0; w < studyOutletIdxs.length; w++) {
-        const i = studyOutletIdxs[w];
-        if (!chosenOutlets.has(w)) {
-          outletPositions[i].occupied = true;  // 红
+      // 候选只取有空椅的 outlet:2 椅任一空就 qualify
+      const candidates = studyOutletIdxs.filter(i => {
+        const keys = tableOutletSeatKeys[i]!;
+        return keys.some(k => freeSeats.has(k));
+      });
+      if (candidates.length === 0) {
+        for (const i of studyOutletIdxs) {
+          outletPositions[i].occupied = true;
           for (const m of outletMeshGroups[i]) m.material = outletMatOccupied;
+        }
+      } else {
+        // 无权重(等概率)随机选 greenCount 个,但自然偏向有空椅的 outlet
+        const indices = candidates.map((_, k) => k);
+        for (let i = indices.length - 1; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        const chosen = new Set<number>();
+        for (let k = 0; k < Math.min(greenCount, indices.length); k++) chosen.add(candidates[indices[k]]);
+        for (const i of studyOutletIdxs) {
+          if (!chosen.has(i)) {
+            outletPositions[i].occupied = true;  // 红
+            for (const m of outletMeshGroups[i]) m.material = outletMatOccupied;
+          }
         }
       }
     } else {
