@@ -337,8 +337,9 @@ function buildShelfPlaceholder(dim: { w: number; h: number; d: number }): THREE.
   g.add(body);
   const capMat = new THREE.MeshStandardMaterial({ color: 0xb08c5e, roughness: 0.6, metalness: 0 });
   for (const side of [-1, 1]) {
+    // cap 中心 ±(w/2-0.04):外表面 ±1.51 凸出 body 端面(±1.5)0.01 —— 消除共面 z-fighting(端部褐/灰白闪烁)
     const cap = new THREE.Mesh(new THREE.BoxGeometry(0.1, dim.h, dim.d + 0.06), capMat);
-    cap.position.set(side * (dim.w / 2 - 0.05), dim.h / 2, 0);
+    cap.position.set(side * (dim.w / 2 - 0.04), dim.h / 2, 0);
     g.add(cap);
   }
   return g;
