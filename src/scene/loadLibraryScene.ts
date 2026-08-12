@@ -734,7 +734,13 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
         const lz = side * DEFAULT_SEAT_SIDE_DIST;
         const sx = p.x + lx * cosR - lz * sinR;
         const sz = p.z + lx * sinR + lz * cosR;
-        const chair = createChair(side, Math.abs(sinR) > 0.5 ? 'x' : 'z');
+        // 靠背方向 = 旋转后的"远离桌子"向量:局部 (0, side) 旋转 rot →
+        // x 分量 -side·sin,z 分量 side·cos;sideEff 取该分量符号,靠背朝外
+        const chairAxis: 'x' | 'z' = Math.abs(sinR) > 0.5 ? 'x' : 'z';
+        const sideEff: 1 | -1 = chairAxis === 'x'
+          ? (sinR > 0 ? -side as 1 | -1 : side)
+          : (cosR >= 0 ? side : -side as 1 | -1);
+        const chair = createChair(sideEff, chairAxis);
         chair.position.set(sx, 0, sz);
         tableZone.add(chair);
         const cb = new THREE.Box3(
