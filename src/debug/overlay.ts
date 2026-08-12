@@ -5,10 +5,13 @@ import type { DebugParams } from '../scene/loadLibraryScene';
 // Debug overlay(lil-gui + Box3Helper visibility toggle)
 //
 // 仅在 dev 下通过 dynamic import 加载(main.ts 里 `if (import.meta.env.DEV)`),
-// prod bundle 不含 lil-gui。提供 rowSpacing / seatSideDist 滑块 → onChange 触发
+// prod bundle 不含 lil-gui。提供 freeSeatCount / freeSeed 滑块 → onChange 触发
 // scene.rebuildTableZone(p),实时拆除并重建桌椅猫群和桌区 collider。打开
 // showColliders 复选框(或按 F)—— 把所有 Box3 碰撞盒画成线框,直观看椅背是否
 // 把过道封死。
+//
+// rowSpacing / seatSideDist 滑块已移除:桌坐标来自 src/scene/layout.json(编辑器
+// 保存 → HMR 生效),不再运行时生成。
 //
 // API 说明(lil-gui 习用):
 //   gui.add(obj, 'propName', min, max, step).onChange(cb)
@@ -28,8 +31,6 @@ export function attachDebugGui(opts: DebugOverlayOptions): void {
   // params 是 GUI 直接绑定的对象:加一个 showColliders 字段(GUI 需要某个属性才行,
   // 用一个本地可变 container 较之 "传 ref 进 setColliderHelpersVisible" 更清晰)
   const params = {
-    rowSpacing: opts.defaultParams.rowSpacing,
-    seatSideDist: opts.defaultParams.seatSideDist,
     freeSeatCount: opts.defaultParams.freeSeatCount,
     freeSeed: opts.defaultParams.freeSeed,
     showColliders: false,
@@ -37,20 +38,12 @@ export function attachDebugGui(opts: DebugOverlayOptions): void {
 
   const gui = new GUI({ title: 'Debug' });
   const tables = gui.addFolder('Study tables');
-  tables
-    .add(params, 'rowSpacing', 1.8, 2.5, 0.02)
-    .name('row spacing (z)')
-    .onChange(() => opts.rebuildTableZone(params));
-  tables
-    .add(params, 'seatSideDist', 0.55, 1.15, 0.05)
-    .name('seat side dist')
-    .onChange(() => opts.rebuildTableZone(params));
-  // 空位数 slider:0-20 个空位(80 自习席里挑这么多当空位)
+  // 空位数 slider:0-N 个空位(全部自习席里挑这么多当空位)
   tables
     .add(params, 'freeSeatCount', 0, 20, 1)
     .name('free seat count')
     .onChange(() => opts.rebuildTableZone(params));
-  // 种子数字框:同 (count, seed) 永远产同一份分布,找到好看的 seed 写回常量
+  // 种子数字框:同 (count, seed) 永远产同一份分布,找到好看的 seed 写回 layout
   tables
     .add(params, 'freeSeed', 0, 9999, 1)
     .name('free seed (re-roll)')
