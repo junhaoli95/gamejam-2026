@@ -927,36 +927,18 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       Math.max(0, Math.round(tableN * (LAYOUT.outlets.studyTableGreenRate ?? CONFIG.charging.studyTableGreenRate))),
     );
     if (studyOutletIdxs.length > 0 && greenCount > 0) {
-      // 按桌分组,按桌内空椅总数算权重 → 选 N 张桌 → 每张选 1 个 outlet 变绿
-      const outletByTable = new Map<number, number[]>();
-      for (const i of studyOutletIdxs) {
-        const key = tableOutletSeatKeys[i]![0].split(',')[0];
-        const t = parseInt(key, 10);
-        if (!outletByTable.has(t)) outletByTable.set(t, []);
-        outletByTable.get(t)!.push(i);
-      }
-      const tableArr = Array.from(outletByTable.entries());
-      const tableWeights = tableArr.map(([_t, outs]) => {
-        const freeN = outs.reduce((acc, i) => acc + tableOutletSeatKeys[i]!.filter(k => freeSeats.has(k)).length, 0);
+      // 直接在 outlet 级别加权选 greenCount 个变绿:每个 outlet 按 2 椅空椅数加权
+      // 允许同桌 2 个 outlet 都入选 → 2 个都绿(摸奖头奖感)
+      const weights = studyOutletIdxs.map(i => {
+        const keys = tableOutletSeatKeys[i]!;
+        const freeN = keys.filter(k => freeSeats.has(k)).length;
         return CONFIG.charging.freeSeatWeights[freeN] ?? 0;
       });
       const rng = mulberry32(seed ^ 0x5eed);
-      const chosenTables = weightedPickByWeight(tableWeights, greenCount, rng);
-      const chosenOutlets = new Set<number>();
-      let tableIdx = 0;
-      for (const entry of tableArr) {
-        if (chosenTables.has(tableIdx)) {
-          const outs = entry[1];
-          const pick = outs[Math.floor(rng() * outs.length)];
-          chosenOutlets.add(pick);
-        }
-        tableIdx++;
-      }
-      for (const i of chosenOutlets) {
-        outletPositions[i].occupied = false;  // 绿
-      }
-      for (const i of studyOutletIdxs) {
-        if (!chosenOutlets.has(i)) {
+      const chosenOutlets = weightedPickByWeight(weights, greenCount, rng);
+      for (let w = 0; w < studyOutletIdxs.length; w++) {
+        const i = studyOutletIdxs[w];
+        if (!chosenOutlets.has(w)) {
           outletPositions[i].occupied = true;  // 红
           for (const m of outletMeshGroups[i]) m.material = outletMatOccupied;
         }
