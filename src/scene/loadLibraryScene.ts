@@ -706,12 +706,16 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
 
     // PR #13 #4:桌面中线 2 电位 → 合并成 1 个 table-level outlet(中心 = 桌中心)。
     // 视觉 2 个 mesh 共享同一 occupied 状态;4 座位都坐猫 = 占(红),1-3 空 = 空(绿)。
+    // 桌整体朝向:rotY=90° 时桌+电位+椅+猫整体旋转(长边沿 z)
+    const tableRot = p.rotY ?? 0;
+    const cosR = Math.cos(tableRot);
+    const sinR = Math.sin(tableRot);
     const tableH = dim.h;
     outletPositions.push({ x: p.x, z: p.z, occupied: false });
     const outletGroup: THREE.Mesh[] = [];
     for (const ox of STUDY_OUTLET_OFFSETS) {
       const sq = new THREE.Mesh(studyOutletGeo, outletMatEmpty);
-      sq.position.set(p.x + ox, tableH + 0.011, p.z);
+      sq.position.set(p.x + ox * cosR, tableH + 0.011, p.z + ox * sinR);
       tableZone.add(sq);
       outletGroup.push(sq);
     }
@@ -719,16 +723,18 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     const outletIdx = outletPositions.length - 1;
     if (isCharge) chargeOutletIndexes.add(outletIdx);
 
-    // 4 椅 + 4 座位猫
+    // 4 椅 + 4 座位猫(椅位局部偏移 (xo, side*seatSideDist) 随桌整体旋转)
     let si = 0;
     const seatKeys: string[] = [];
     for (const side of [-1, 1] as const) {
       for (const xo of SEAT_OFFSETS) {
         const key = `${tableIdx},${si}`;
         seatKeys.push(key);
-        const sx = p.x + xo;
-        const sz = p.z + side * DEFAULT_SEAT_SIDE_DIST;
-        const chair = createChair(side, 'z');
+        const lx = xo;
+        const lz = side * DEFAULT_SEAT_SIDE_DIST;
+        const sx = p.x + lx * cosR - lz * sinR;
+        const sz = p.z + lx * sinR + lz * cosR;
+        const chair = createChair(side, Math.abs(sinR) > 0.5 ? 'x' : 'z');
         chair.position.set(sx, 0, sz);
         tableZone.add(chair);
         const cb = new THREE.Box3(
@@ -738,7 +744,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
         tableColliders.push(cb);
         pushTableHelper(cb);
         if (!freeSeats.has(key)) {
-          const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], side === 1 ? 0 : Math.PI);
+          const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], tableRot + (side === 1 ? 0 : Math.PI));
           cat.position.set(sx, 0.45, sz);
           tableZone.add(cat);
         }
