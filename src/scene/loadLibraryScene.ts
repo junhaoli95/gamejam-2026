@@ -233,7 +233,7 @@ export interface LibraryScene {
   /** 静态+桌区合并碰撞体(玩家与相机共用)。rebuild 时原地刷新,引用稳定。 */
   colliders: THREE.Box3[];
   /** 所有电位位置(柱电位+端板盒+桌电位+壁插),供 SharedState/minimap 消费。 */
-  outlets: Array<{ x: number; z: number; occupied: boolean }>;
+  outlets: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean }>;
   update: (dt: number) => void;
   /** Debug overlay 用:按新 params 拆除并重建桌区(桌椅猫+电位+collider+helper)。 */
   rebuildTableZone: (params: DebugParams) => void;
@@ -651,7 +651,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   let freeSeats: Set<string> = computeFreeSeats(params.freeSeatCount, params.freeSeed);
   let currentParams: DebugParams = params;
   let furIdx = 0;
-  const outletPositions: Array<{ x: number; z: number; occupied: boolean }> = [];
+  const outletPositions: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean }> = [];
 
   function buildOneStudyTable(p: Placement, tableIdx: number): void {
     const isCharge = p.kind === 'studyTable-charge';
@@ -717,7 +717,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       const sq = new THREE.Mesh(studyOutletGeo, outletMatEmpty);
       sq.position.set(p.x + ox * cosR, tableH + 0.011, p.z + ox * sinR);
       tableZone.add(sq);
-      outletPositions.push({ x: p.x + ox * cosR, z: p.z + ox * sinR, occupied: false });
+      outletPositions.push({ x: p.x + ox * cosR, z: p.z + ox * sinR, occupied: false, occupiable: true });
       outletMeshGroups.push([sq]);
       const outletIdx = outletPositions.length - 1;
       studyOutletIdxs.push(outletIdx);
@@ -800,12 +800,12 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     chargeOutletIndexes.clear();
     let ciMesh = 0;
     for (const c of outletDraw.columns) {
-      outletPositions.push({ x: c.x + c.face! * (MODEL_DIMS.column.w / 2 + 0.01), z: c.z, occupied: false });
+      outletPositions.push({ x: c.x + c.face! * (MODEL_DIMS.column.w / 2 + 0.01), z: c.z, occupied: false, occupiable: true });
       outletMeshGroups.push([columnOutletMeshes[ciMesh++]]);
       tableOutletSeatKeys.push(null);
     }
     for (const w of outletDraw.walls) {
-      outletPositions.push({ x: w.x, z: w.z, occupied: false });
+      outletPositions.push({ x: w.x, z: w.z, occupied: false, occupiable: false });
       // 壁插常亮(spec §6.2):无切换 mesh 视图(空数组)
       outletMeshGroups.push([]);
       tableOutletSeatKeys.push(null);

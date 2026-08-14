@@ -10,13 +10,14 @@ const cfg: NpcConfig = {
   arriveDist: 0.5,
 };
 
-function makeHarness(positions: Array<{ x: number; z: number }>) {
+function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: boolean[]) {
   const occupied = positions.map(() => false);
   const controller = createNpcController({
     getOutletCount: () => positions.length,
     getOutletPos: (i) => positions[i],
     isOutletOccupied: (i) => occupied[i],
     setOutletOccupied: (i, occ) => { occupied[i] = occ; },
+    ...(occupiable ? { isOutletOccupiable: (i) => occupiable[i] } : {}),
     npcCount: 1,
     cfg,
   });
@@ -124,5 +125,35 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     const insideColumn = e.x > -0.5 && e.x < 0.5 && e.z > -1 && e.z < 1;
     expect(insideColumn).toBe(false);
     expect(e.x).toBeGreaterThanOrEqual(0.88 - 1e-6);  // 柱右边缘外(radius 0.38)
+  });
+
+  it('不可占桩(壁插):最近桩不可占 → 跳过,选次近可占桩', () => {
+    // 0 号(5m)= 壁插不可占,1 号(10m)= 可占
+    const { controller } = makeHarness(
+      [{ x: 5, z: 0 }, { x: 10, z: 0 }, { x: 15, z: 0 }],
+      [false, true, true],
+    );
+    const e = controller.entities[0];
+    controller.update(0.15);  // idle 完 → moving
+    expect(e.state).toBe('moving');
+    expect(e.targetOutletIndex).toBe(1);  // 跳过 0 号壁插
+  });
+
+  it('不可占桩(壁插):全部不可占 → 无目标,留在 idle', () => {
+    const { controller } = makeHarness(
+      [{ x: 5, z: 0 }, { x: 10, z: 0 }],
+      [false, false],
+    );
+    const e = controller.entities[0];
+    controller.update(0.15);  // idle 完 → 无目标可走
+    expect(e.state).toBe('idle');
+    expect(e.targetOutletIndex).toBe(-1);
+  });
+
+  it('兼容:未传 isOutletOccupiable(旧 harness/测试)→ 默认全部可占', () => {
+    const { controller } = makeHarness([{ x: 5, z: 0 }, { x: 10, z: 0 }]);
+    const e = controller.entities[0];
+    controller.update(0.15);
+    expect(e.targetOutletIndex).toBe(0);  // 最近可占
   });
 });

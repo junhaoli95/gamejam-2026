@@ -32,6 +32,8 @@ export interface NpcControllerOptions {
   cfg: NpcConfig;
   /** 碰撞盒列表(轻量 AABB,与 player colliders 同源;npc 移动后推出防穿墙) */
   colliders?: Array<{ minX: number; minZ: number; maxX: number; maxZ: number }>;
+  /** PR #17 A:桩是否可被 NPC 占用(壁插常亮不可占;缺省 = 全部可占,兼容旧测试) */
+  isOutletOccupiable?: (i: number) => boolean;
 }
 
 export interface NpcController {
@@ -80,12 +82,14 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     }
   }
 
-  /** 遍历所有 outlets,找 isOutletOccupied(i)===false 的最近一个;-1 = 全占。 */
+  /** 遍历所有 outlets,找 isOutletOccupied(i)===false 且可占(非壁插)的最近一个;-1 = 无可选。 */
   function pickNearestFreeOutlet(fromX: number, fromZ: number): number {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < opts.getOutletCount(); i++) {
       if (opts.isOutletOccupied(i)) continue;
+      // PR #17 A:壁插(occupiable=false)常亮可充,不让 NPC 占
+      if (opts.isOutletOccupiable && !opts.isOutletOccupiable(i)) continue;
       const p = opts.getOutletPos(i);
       const d = Math.hypot(p.x - fromX, p.z - fromZ);
       if (d < bestDist) {

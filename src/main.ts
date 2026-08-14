@@ -163,6 +163,8 @@ const npcController = createNpcController({
   getOutletPos: (i) => ({ x: outlets[i].x, z: outlets[i].z }),
   isOutletOccupied: (i) => outlets[i].occupied,
   setOutletOccupied: setOutletOccupied,
+  // PR #17 A:壁插(occupiable=false)常亮可充,NPC 不占
+  isOutletOccupiable: (i) => outlets[i].occupiable !== false,
   npcCount: CONFIG.npc.count,
   cfg: CONFIG.npc,
   // PR #16 fix:colliders 转轻量 AABB 给 NPC 防穿墙(与 player 同源)
