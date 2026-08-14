@@ -141,10 +141,8 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     if (!path) return false;
     e.path = path;
     e.pathIdx = 1;  // path[0] = 起点 cell,直接跳过
-    e.pathX = e.path.map(c => cellToWorld(c, grid).x);  // 缓存 world 坐标
+    e.pathX = e.path.map(c => cellToWorld(c, grid).x);  // 缓存 world 坐标(cell 中心)
     e.pathZ = e.path.map(c => cellToWorld(c, grid).z);
-    e.pathX[e.pathX.length - 1] = p.x;  // 最后一点 = 桩真实坐标(精确到达)
-    e.pathZ[e.pathZ.length - 1] = p.z;
     return true;
   }
 
@@ -213,7 +211,7 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
         }
         const p = opts.getOutletPos(e.targetOutletIndex);
         if (opts.grid && e.path.length > 1) {
-          // A* 路径模式:逐 waypoint 走(pathX/pathZ,最后一点 = 桩真实坐标)
+          // A* 路径模式:逐 waypoint 走(cell 中心),走完最后 cell = 到达桩附近
           let remaining = cfg.walkSpeed * dt;
           while (remaining > 1e-9 && e.pathIdx < e.path.length) {
             const cwX = e.pathX[e.pathIdx];
@@ -232,19 +230,24 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
               remaining = 0;
             }
           }
-          // 路径结束(最后一点 = 桩):判定到达
+          // 到达判定:path 走完 且 距桩 ≤ arriveDist(桩可能在 blocked cell,nearestFreeCell 是桩旁)
           const dx = p.x - e.x;
           const dz = p.z - e.z;
-          const dist = Math.hypot(dx, dz);
-          if (dist <= cfg.arriveDist) {
+          const distToOutlet = Math.hypot(dx, dz);
+          if (e.pathIdx >= e.path.length && distToOutlet <= cfg.arriveDist) {
             resolveCollision(e);
             e.state = 'occupying';
             e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);
             opts.setOutletOccupied(e.targetOutletIndex, true);
           } else {
-            const step = Math.min(remaining, dist);
-            e.x += (dx / dist) * step;
-            e.z += (dz / dist) * step;
+            // 未到:若 path 已走完但桩还远(最后一个 cell 中心不可达)→ 沿路径方向直线逼近
+            if (e.pathIdx >= e.path.length) {
+              const step = Math.min(remaining, distToOutlet);
+              if (distToOutlet > 1e-9) {
+                e.x += (dx / distToOutlet) * step;
+                e.z += (dz / distToOutlet) * step;
+              }
+            }
             resolveCollision(e);
           }
         } else {

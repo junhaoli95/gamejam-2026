@@ -12,6 +12,9 @@ const cfg: NpcConfig = {
   arriveDist: 0.5,
 };
 
+// 寻路测试:cellSize 1 时最后 cell 中心离桩 ≤0.707m,arriveDist 需覆盖
+const pathCfg: NpcConfig = { ...cfg, arriveDist: 0.8 };
+
 function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: boolean[], grid?: Grid) {
   const occupied = positions.map(() => false);
   const controller = createNpcController({
@@ -22,7 +25,7 @@ function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: bo
     ...(occupiable ? { isOutletOccupiable: (i) => occupiable[i] } : {}),
     ...(grid ? { grid } : {}),
     npcCount: 1,
-    cfg,
+    cfg: grid ? pathCfg : cfg,
   });
   return { controller, occupied };
 }
