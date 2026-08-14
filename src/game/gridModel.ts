@@ -14,6 +14,7 @@ export function toGrid(
   worldW: number,
   worldD: number,
   cellSize: number,
+  inflate = 0,
 ): Grid {
   const w = Math.ceil(worldW / cellSize);
   const d = Math.ceil(worldD / cellSize);
@@ -24,7 +25,8 @@ export function toGrid(
       const wx = (xi + 0.5) * cellSize - worldW / 2;
       const wz = (zi + 0.5) * cellSize - worldD / 2;
       for (const b of colliders) {
-        if (wx >= b.min.x && wx <= b.max.x && wz >= b.min.z && wz <= b.max.z) {
+        if (wx >= b.min.x - inflate && wx <= b.max.x + inflate &&
+            wz >= b.min.z - inflate && wz <= b.max.z + inflate) {
           cells[zi * w + xi] = 1;
           break;
         }
