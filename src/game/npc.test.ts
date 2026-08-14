@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { Box3, Vector3 } from 'three';
 import { createNpcController, type NpcConfig } from './npc';
+import { toGrid, type Grid } from './gridModel';
 
 const cfg: NpcConfig = {
   walkSpeed: 2,
@@ -10,7 +12,7 @@ const cfg: NpcConfig = {
   arriveDist: 0.5,
 };
 
-function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: boolean[]) {
+function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: boolean[], grid?: Grid) {
   const occupied = positions.map(() => false);
   const controller = createNpcController({
     getOutletCount: () => positions.length,
@@ -18,6 +20,7 @@ function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: bo
     isOutletOccupied: (i) => occupied[i],
     setOutletOccupied: (i, occ) => { occupied[i] = occ; },
     ...(occupiable ? { isOutletOccupiable: (i) => occupiable[i] } : {}),
+    ...(grid ? { grid } : {}),
     npcCount: 1,
     cfg,
   });
@@ -155,5 +158,85 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     const e = controller.entities[0];
     controller.update(0.15);
     expect(e.targetOutletIndex).toBe(0);  // 最近可占
+  });
+});
+
+describe('NPC A* 寻路 (PR #17 B)', () => {
+  // 世界 20×20,cellSize 1 → x,z ∈ [-10,10];短竖墙 x∈[-0.5,0.5] z∈[-1,1](占 cell x=9, z∈[9,10],两端可绕)
+  const wall = new Box3(new Vector3(-0.5, 0, -1), new Vector3(0.5, 3, 1));
+  const wallGrid = toGrid([wall], 20, 20, 1);
+
+  it('可达:墙挡直线 → A* 绕障走到桩并占用(变红)', () => {
+    const { controller, occupied } = makeHarness([{ x: 5, z: 0 }], undefined, wallGrid);
+    const e = controller.entities[0];
+    e.x = -5; e.z = 0;
+    controller.update(0.15);  // idle 完 → moving,目标 0 号 (5,0)
+    expect(e.state).toBe('moving');
+    expect(e.targetOutletIndex).toBe(0);
+    console.log('[DBG] path', JSON.stringify(e.path), 'idx', e.pathIdx);
+    // 绕路约 12 cells ≈ 6s;给 20s
+    for (let i = 0; i < 200; i++) {
+      controller.update(0.1);
+      if (i % 20 === 0 || i < 25) console.log(`[DBG] f${i}`, e.x.toFixed(2), e.z.toFixed(2), 'idx', e.pathIdx);
+    }
+    console.log('[DBG] final', e.state, e.x.toFixed(2), e.z.toFixed(2), 'idx', e.pathIdx, 'pathlen', e.path.length);
+    expect(e.state).toBe('occupying');
+    expect(occupied[0]).toBe(true);
+    expect(e.x).toBeGreaterThan(4);   // 桩 (5,0) 附近
+    expect(Math.abs(e.z)).toBeLessThan(1.5);
+  });
+
+  it('不可达:最近桩被墙围死 → 改选可达桩', () => {
+    // 0 号桩 (0,0) 在 0.3m 厚墙围出的封闭盒内(不可达);1 号桩 (8,0) 在外
+    const walls = [
+      new Box3(new Vector3(-2.6, 0, -2.6), new Vector3(2.6, 3, -2.3)),
+      new Box3(new Vector3(-2.6, 0, 2.3), new Vector3(2.6, 3, 2.6)),
+      new Box3(new Vector3(-2.6, 0, -2.3), new Vector3(-2.3, 3, 2.3)),
+      new Box3(new Vector3(2.3, 0, -2.3), new Vector3(2.6, 3, 2.3)),
+    ];
+    const closedGrid = toGrid(walls, 20, 20, 1);
+    const { controller } = makeHarness([{ x: 0, z: 0 }, { x: 8, z: 0 }], undefined, closedGrid);
+    const e = controller.entities[0];
+    e.x = -8; e.z = 0;
+    controller.update(0.15);
+    expect(e.state).toBe('moving');
+    expect(e.targetOutletIndex).toBe(1);  // 0 号最近但不可达 → 改选 1 号
+    // 16m ÷ 2m/s = 8s 走到;occupy 0.2s。追踪是否到达过桩 1 并占用
+    let sawOccupying = false;
+    for (let i = 0; i < 200; i++) {
+      controller.update(0.1);
+      if (e.targetOutletIndex === 1 && e.state === 'occupying') sawOccupying = true;
+    }
+    expect(sawOccupying).toBe(true);
+    expect(e.x).toBeGreaterThan(6);  // 桩 (8,0) 附近(走完整个周期后可能已 idle 但位置保留)
+  });
+
+  it('目标被抢 → 中途改道(重新寻路到新桩)', () => {
+    const { controller, occupied } = makeHarness([{ x: 5, z: 0 }, { x: 5, z: -6 }], undefined, wallGrid);
+    const e = controller.entities[0];
+    e.x = -5; e.z = 0;
+    controller.update(0.15);
+    expect(e.targetOutletIndex).toBe(0);  // (5,0) 最近
+    occupied[0] = true;                   // 玩家抢先
+    controller.update(0.1);
+    expect(e.targetOutletIndex).toBe(1);  // 改选 (5,-6)
+    for (let i = 0; i < 300; i++) controller.update(0.1);
+    expect(e.state).toBe('occupying');
+    expect(e.targetOutletIndex).toBe(1);
+  });
+
+  it('完整周期(有 grid):idle→moving→occupying(红)→idle(绿)', () => {
+    const grid = toGrid([], 20, 20, 1);
+    const { controller, occupied } = makeHarness([{ x: 4, z: 0 }], undefined, grid);
+    const e = controller.entities[0];
+    e.x = 0; e.z = 0;
+    controller.update(0.15);  // → moving
+    expect(e.state).toBe('moving');
+    for (let i = 0; i < 100; i++) controller.update(0.1);  // 4m @2m/s = 2s
+    expect(e.state).toBe('occupying');
+    expect(occupied[0]).toBe(true);
+    controller.update(0.25);  // occupy 0.2s 结束
+    expect(e.state).toBe('idle');
+    expect(occupied[0]).toBe(false);
   });
 });
