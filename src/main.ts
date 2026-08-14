@@ -8,6 +8,7 @@ import { mountMissionToast } from './ui/missionToast';
 import { mountHighScore } from './ui/highScore';
 import { mountPlayerStats } from './game/playerStats';
 import { hasLineOfSight, toLosBoxes } from './game/los';
+import { toGrid } from './game/gridModel';
 import { createNpcController } from './game/npc';
 import { createNpcMeshManager } from './scene/npcMesh';
 import { CONFIG } from './game/config';
@@ -165,6 +166,8 @@ const npcController = createNpcController({
   setOutletOccupied: setOutletOccupied,
   // PR #17 A:壁插(occupiable=false)常亮可充,NPC 不占
   isOutletOccupiable: (i) => outlets[i].occupiable !== false,
+  // PR #17 B:A* 寻路网格(cellSize 0.4,与玩家碰撞粒度一致;rebuild 极少,启动建一次)
+  grid: toGrid(colliders, CONFIG.world.w, CONFIG.world.d, CONFIG.world.cellSize),
   npcCount: CONFIG.npc.count,
   cfg: CONFIG.npc,
   // PR #16 fix:colliders 转轻量 AABB 给 NPC 防穿墙(与 player 同源)

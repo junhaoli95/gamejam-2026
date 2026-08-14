@@ -1,6 +1,11 @@
 // PR #16 B:NPC AI 简化版 —— 纯 TS 状态机,零 DOM/Three 依赖,可单测。
-// 状态机:idle(随机停 2-5s)→ moving(直线走向最近空桩)→ occupying(占 8-15s)→ idle。
-// 目标被抢(occupied)→ 立刻改选下一个空桩。无 A*,只跟距离直线走(完整版留 PR #17)。
+// 状态机:idle(随机停 2-5s)→ moving(A* 寻路走向最近空桩)→ occupying(占 8-15s)→ idle。
+// 目标被抢(occupied)→ 立刻改选下一个空桩。PR #17 B:接入 gridModel+pathfinding,A* 绕障;
+// 无 grid(旧 harness)→ 退化为直线走 + resolveCollision。
+
+import type { Cell, Grid } from './gridModel';
+import { worldToCell, cellToWorld, isBlocked } from './gridModel';
+import { findPath } from './pathfinding';
 
 export type NpcState = 'idle' | 'moving' | 'occupying';
 
@@ -12,6 +17,10 @@ export interface NpcEntity {
   idleTimer: number;          // idle 阶段倒计时
   occupyTimer: number;        // occupying 阶段倒计时
   meshIndex: number;          // 对应 scene npcMeshes 数组 index
+  path: Cell[];               // PR #17 B:当前 A* 路径(cell 序列,path[0]=起点 cell)
+  pathIdx: number;            // 当前正在走向 path[pathIdx]
+  pathX: number[];            // 对应 world x(最后一点 = 桩真实 x)
+  pathZ: number[];            // 对应 world z(最后一点 = 桩真实 z)
 }
 
 export interface NpcConfig {
@@ -34,6 +43,8 @@ export interface NpcControllerOptions {
   colliders?: Array<{ minX: number; minZ: number; maxX: number; maxZ: number }>;
   /** PR #17 A:桩是否可被 NPC 占用(壁插常亮不可占;缺省 = 全部可占,兼容旧测试) */
   isOutletOccupiable?: (i: number) => boolean;
+  /** PR #17 B:A* 寻路网格(缺省 = 直线走,兼容旧测试)。rebuild 后须由调用方更新。 */
+  grid?: Grid;
 }
 
 export interface NpcController {
@@ -82,11 +93,12 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     }
   }
 
-  /** 遍历所有 outlets,找 isOutletOccupied(i)===false 且可占(非壁插)的最近一个;-1 = 无可选。 */
-  function pickNearestFreeOutlet(fromX: number, fromZ: number): number {
+  /** 遍历所有 outlets,找 isOutletOccupied(i)===false 且可占(非壁插)的最近一个;-1 = 无可选。exclude:跳过某桩(不可达重选用)。 */
+  function pickNearestFreeOutlet(fromX: number, fromZ: number, exclude = -1): number {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < opts.getOutletCount(); i++) {
+      if (i === exclude) continue;
       if (opts.isOutletOccupied(i)) continue;
       // PR #17 A:壁插(occupiable=false)常亮可充,不让 NPC 占
       if (opts.isOutletOccupiable && !opts.isOutletOccupiable(i)) continue;
@@ -98,6 +110,55 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       }
     }
     return best;
+  }
+
+  /** 桩/起点可能落在 blocked cell(柱面桩贴柱、桌中心桩)→ 找最近 free cell 作寻路端点。 */
+  function nearestFreeCell(grid: Grid, wx: number, wz: number): Cell {
+    const start = worldToCell(wx, wz, grid);
+    if (!isBlocked(grid, start)) return start;
+    for (let r = 1; r <= 8; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const c = { x: start.x + dx, z: start.z + dz };
+          if (!isBlocked(grid, c)) return c;
+        }
+      }
+    }
+    return start;
+  }
+
+  /** 用 grid 算到 e.targetOutletIndex 的路径。无 grid → 直线模式,返回 true。false = 该桩不可达。 */
+  function computePath(e: NpcEntity): boolean {
+    const grid = opts.grid;
+    if (!grid) return true;
+    const p = opts.getOutletPos(e.targetOutletIndex);
+    const path = findPath(
+      grid,
+      nearestFreeCell(grid, e.x, e.z),
+      nearestFreeCell(grid, p.x, p.z),
+    );
+    if (!path) return false;
+    e.path = path;
+    e.pathIdx = 1;  // path[0] = 起点 cell,直接跳过
+    e.pathX = e.path.map(c => cellToWorld(c, grid).x);  // 缓存 world 坐标
+    e.pathZ = e.path.map(c => cellToWorld(c, grid).z);
+    e.pathX[e.pathX.length - 1] = p.x;  // 最后一点 = 桩真实坐标(精确到达)
+    e.pathZ[e.pathZ.length - 1] = p.z;
+    return true;
+  }
+
+  /** 选一个可达空桩作为目标;全不可达/全占 → -1。 */
+  function pickReachableOutlet(e: NpcEntity, exclude = -1): number {
+    let t = pickNearestFreeOutlet(e.x, e.z, exclude);
+    let excluded = exclude;
+    while (t >= 0) {
+      e.targetOutletIndex = t;
+      if (computePath(e)) return t;
+      excluded = t;
+      t = pickNearestFreeOutlet(e.x, e.z, excluded);
+    }
+    return -1;
   }
 
   function randRange(rng: () => number, min: number, max: number): number {
@@ -118,6 +179,10 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       idleTimer: newIdleTimer(),
       occupyTimer: 0,
       meshIndex: i,
+      path: [],
+      pathX: [],
+      pathZ: [],
+      pathIdx: 0,
     });
   }
 
@@ -126,20 +191,19 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       if (e.state === 'idle') {
         e.idleTimer -= dt;
         if (e.idleTimer <= 0) {
-          const t = pickNearestFreeOutlet(e.x, e.z);
+          const t = pickReachableOutlet(e);
           if (t >= 0) {
-            e.targetOutletIndex = t;
             e.state = 'moving';
           } else {
-            e.idleTimer = newIdleTimer();  // 全占,再等一轮
+            e.idleTimer = newIdleTimer();  // 全占/全不可达,再等一轮
           }
         }
       } else if (e.state === 'moving') {
         // 目标被别人抢了(自己占的只会发生在 arrive 同帧,已切 occupying)→ 改选下一个空桩
         if (opts.isOutletOccupied(e.targetOutletIndex)) {
-          const t = pickNearestFreeOutlet(e.x, e.z);
+          const t = pickReachableOutlet(e, e.targetOutletIndex);
           if (t >= 0) {
-            e.targetOutletIndex = t;
+            continue;
           } else {
             e.targetOutletIndex = -1;
             e.state = 'idle';
@@ -148,21 +212,59 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
           continue;
         }
         const p = opts.getOutletPos(e.targetOutletIndex);
-        const dx = p.x - e.x;
-        const dz = p.z - e.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist <= cfg.arriveDist) {
-          // 到达:切 occupying。桩在柱面时 NPC 可能走进柱 —— resolveCollision 推出;
-          // 若推出后仍在柱内(多柱重叠/极端),沿来路反向退 0.5m 兜底。
-          resolveCollision(e);
-          e.state = 'occupying';
-          e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);
-          opts.setOutletOccupied(e.targetOutletIndex, true);
+        if (opts.grid && e.path.length > 1) {
+          // A* 路径模式:逐 waypoint 走(pathX/pathZ,最后一点 = 桩真实坐标)
+          let remaining = cfg.walkSpeed * dt;
+          while (remaining > 1e-9 && e.pathIdx < e.path.length) {
+            const cwX = e.pathX[e.pathIdx];
+            const cwZ = e.pathZ[e.pathIdx];
+            const dx = cwX - e.x;
+            const dz = cwZ - e.z;
+            const dist = Math.hypot(dx, dz);
+            if (dist <= remaining) {
+              e.x = cwX;
+              e.z = cwZ;
+              remaining -= dist;
+              e.pathIdx++;
+            } else {
+              e.x += (dx / dist) * remaining;
+              e.z += (dz / dist) * remaining;
+              remaining = 0;
+            }
+          }
+          // 路径结束(最后一点 = 桩):判定到达
+          const dx = p.x - e.x;
+          const dz = p.z - e.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist <= cfg.arriveDist) {
+            resolveCollision(e);
+            e.state = 'occupying';
+            e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);
+            opts.setOutletOccupied(e.targetOutletIndex, true);
+          } else {
+            const step = Math.min(remaining, dist);
+            e.x += (dx / dist) * step;
+            e.z += (dz / dist) * step;
+            resolveCollision(e);
+          }
         } else {
-          const step = Math.min(cfg.walkSpeed * dt, dist);  // 防超调过头
-          e.x += (dx / dist) * step;
-          e.z += (dz / dist) * step;
-          resolveCollision(e);  // PR #16 fix:移动后防穿墙推出
+          // 直线模式(无 grid / path 未算):原逻辑
+          const dx = p.x - e.x;
+          const dz = p.z - e.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist <= cfg.arriveDist) {
+            // 到达:切 occupying。桩在柱面时 NPC 可能走进柱 —— resolveCollision 推出;
+            // 若推出后仍在柱内(多柱重叠/极端),沿来路反向退 0.5m 兜底。
+            resolveCollision(e);
+            e.state = 'occupying';
+            e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);
+            opts.setOutletOccupied(e.targetOutletIndex, true);
+          } else {
+            const step = Math.min(cfg.walkSpeed * dt, dist);  // 防超调过头
+            e.x += (dx / dist) * step;
+            e.z += (dz / dist) * step;
+            resolveCollision(e);  // PR #16 fix:移动后防穿墙推出
+          }
         }
       } else {
         e.occupyTimer -= dt;
@@ -182,6 +284,10 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     for (const e of entities) {
       e.state = 'idle';
       e.targetOutletIndex = -1;
+      e.path = [];
+      e.pathX = [];
+      e.pathZ = [];
+      e.pathIdx = 0;
       e.idleTimer = newIdleTimer();
       e.occupyTimer = 0;
     }
