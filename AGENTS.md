@@ -57,6 +57,7 @@ interface OpponentController {
 6. 提交信息用英文，格式：`type: summary`（如 `feat: add dash pip system`）
 7. **Git 工作流（PR-based，开发者铁律）**：
    - AI 在 feature branch 上自由 commit，不再每次问用户
+   - **merge 铁律（2026-08-14 加，Snake 越权 merge PR #26 的教训）**：AI 一律禁止执行任何 merge 操作 —— 包括 `gh pr merge`、本地 `git merge`/`git rebase` 进 main、GitHub UI 的 merge 按钮。merge 只能由开发者本人（tommy）在 GitHub 上执行。AI 只做：commit → push → 开 PR → 说 "READY FOR REVIEW" 停手 → 等开发者 merge 后同步 main。违反此条 = 严重越权。
    - 所有变更通过 Pull Request 进入 `main`，开发者 review 后 merge
    - branch 命名：`feat/<x>` / `chore/<x>` / `fix/<x>`
    - 完成后 `git push -u origin <branch>` → `gh pr create`
