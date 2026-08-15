@@ -1240,7 +1240,33 @@ function buildJson() {
   };
 }
 
-const SERVER = 'http://localhost:8899';
+// Probe the save server because it increments its port when the default is occupied.
+let SERVER = null;
+const SERVER_BASE_PORT = 8899;
+const SERVER_MAX_TRIES = 20;
+
+async function probeServer() {
+  const results = await Promise.allSettled(
+    Array.from({ length: SERVER_MAX_TRIES }, (_, i) =>
+      fetch(`http://localhost:${SERVER_BASE_PORT + i}/health`, {
+        mode: 'cors',
+        signal: AbortSignal.timeout(300),
+      })
+        .then(r => (r.ok ? r.json() : null))
+        .then(j => (j && j.ok ? `http://localhost:${SERVER_BASE_PORT + i}` : null)),
+    ),
+  );
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value) return result.value;
+  }
+  return null;
+}
+
+async function resolveServer() {
+  if (SERVER) return SERVER;
+  SERVER = await probeServer();
+  return SERVER;
+}
 
 const KIND_BY_NAME = {
   studyTable: 'T', 'studyTable-charge': '★', column: 'C', bookshelf: 'B',
@@ -1277,8 +1303,10 @@ function stateFromJson(j) {
 }
 
 async function serverInfo() {
+  const base = await resolveServer();
+  if (!base) return null;
   try {
-    const r = await fetch(SERVER + '/health', { mode: 'cors' });
+    const r = await fetch(base + '/health', { mode: 'cors' });
     return r.ok ? await r.json() : null;
   } catch (err) {
     return null;
@@ -1295,7 +1323,9 @@ async function refreshSaveState() {
     return;
   }
   try {
-    const r = await fetch(SERVER + '/layout/history', { mode: 'cors' });
+    const base = await resolveServer();
+    if (!base) throw new Error('save server unavailable');
+    const r = await fetch(base + '/layout/history', { mode: 'cors' });
     const j = await r.json();
     if (j.history.length === 0) {
       listEl.innerHTML = '暂无历史(保存后自动备份)';
@@ -1314,9 +1344,15 @@ async function refreshSaveState() {
 }
 
 async function saveToGame() {
+  const base = await resolveServer();
+  if (!base) {
+    setStatus('保存失败:服务器未启动(先跑 node tools/save-server.mjs)');
+    refreshSaveState();
+    return;
+  }
   setStatus('保存中…');
   try {
-    const r = await fetch(SERVER + '/layout', {
+    const r = await fetch(base + '/layout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildJson()),
@@ -1335,17 +1371,22 @@ async function saveToGame() {
 }
 
 async function restoreFrom(file) {
+  const base = await resolveServer();
+  if (!base) {
+    setStatus('恢复失败:服务器未连接');
+    return;
+  }
   pushHistory(snapshot());
   setStatus('恢复 ' + file + '…');
   try {
-    const r = await fetch(SERVER + '/layout/restore', {
+    const r = await fetch(base + '/layout/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ file }),
     });
     const j = await r.json();
     if (j.ok) {
-      const cur = await fetch(SERVER + '/layout', { mode: 'cors' }).then(res => res.json());
+      const cur = await fetch(base + '/layout', { mode: 'cors' }).then(res => res.json());
       applyState(stateFromJson(cur));
       pushHistory(snapshot());
       setStatus('已恢复 ' + file + (j.config && j.config.changed ? ' · config 已同步' : ''));
@@ -1449,11 +1490,14 @@ buildBrushes();
 buildAxis();
 async function initLayout() {
   // 服务器优先:所有浏览器打开都看到游戏当前布局(单一真源 layout.json)
+  const base = await resolveServer();
   let serverLayout = null;
-  try {
-    const r = await fetch(SERVER + '/layout', { mode: 'cors' });
-    if (r.ok) serverLayout = await r.json();
-  } catch (err) { serverLayout = null; }
+  if (base) {
+    try {
+      const r = await fetch(base + '/layout', { mode: 'cors' });
+      if (r.ok) serverLayout = await r.json();
+    } catch (err) { serverLayout = null; }
+  }
   if (serverLayout) {
     historyStack = [];
     redoStack = [];

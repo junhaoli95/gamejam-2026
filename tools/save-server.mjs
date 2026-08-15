@@ -177,8 +177,22 @@ const server = http.createServer(async (req, res) => {
 });
 
 fs.mkdirSync(TARGET, { recursive: true });
-server.listen(PORT, () => {
-  console.log(`[layout-server] listening on http://localhost:${PORT}`);
-  console.log(`[layout-server] target: ${TARGET}`);
-  console.log(`[layout-server] config: ${CONFIG_FILE}`);
-});
+
+// Match Vite's behavior when the default port is already occupied.
+const MAX_TRIES = 20;
+function tryListen(port, attempt) {
+  const srv = server.listen(port, () => {
+    console.log(`[layout-server] listening on http://localhost:${port}`);
+    console.log(`[layout-server] target: ${TARGET}`);
+    console.log(`[layout-server] config: ${CONFIG_FILE}`);
+  });
+  srv.on('error', (err) => {
+    if (err.code === 'EADDRINUSE' && attempt < MAX_TRIES) {
+      tryListen(port + 1, attempt + 1);
+    } else {
+      console.error(`[layout-server] port ${port} unavailable: ${err.message}`);
+      process.exit(1);
+    }
+  });
+}
+tryListen(PORT, 0);
