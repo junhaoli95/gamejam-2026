@@ -1,0 +1,96 @@
+{
+  "room": {
+    "w": 32,
+    "h": 24
+  },
+  "outlets": {
+    "columnCount": [
+      4,
+      6
+    ],
+    "wallCount": [
+      2,
+      4
+    ],
+    "seed": null
+  },
+  "placements": [
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": -8
+    },
+    {
+      "kind": "studyTable",
+      "x": -4,
+      "z": -8
+    },
+    {
+      "kind": "studyTable",
+      "x": 2,
+      "z": -8
+    },
+    {
+      "kind": "studyTable",
+      "x": 9,
+      "z": -8
+    },
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": 2
+    },
+    {
+      "kind": "studyTable",
+      "x": 10,
+      "z": 2
+    },
+    {
+      "kind": "studyTable-charge",
+      "x": 0,
+      "z": 4
+    },
+    {
+      "kind": "column",
+      "x": -14,
+      "z": -11
+    },
+    {
+      "kind": "column",
+      "x": -14,
+      "z": -5
+    },
+    {
+      "kind": "column",
+      "x": -14,
+      "z": 1
+    },
+    {
+      "kind": "column",
+      "x": 14,
+      "z": -11
+    },
+    {
+      "kind": "column",
+      "x": 14,
+      "z": -5
+    },
+    {
+      "kind": "column",
+      "x": 14,
+      "z": 1
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14.5,
+      "z": 7,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14.5,
+      "z": 7,
+      "rotY": 90
+    }
+  ]
+}

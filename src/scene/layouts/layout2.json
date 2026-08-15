@@ -1,0 +1,156 @@
+{
+  "room": {
+    "w": 32,
+    "h": 24
+  },
+  "outlets": {
+    "columnCount": [
+      4,
+      6
+    ],
+    "wallCount": [
+      2,
+      4
+    ],
+    "seed": null
+  },
+  "placements": [
+    {
+      "kind": "studyTable",
+      "x": -6.75,
+      "z": -9.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -6.75,
+      "z": -7.1
+    },
+    {
+      "kind": "studyTable",
+      "x": -6.75,
+      "z": -4.7
+    },
+    {
+      "kind": "studyTable",
+      "x": -6.75,
+      "z": -2.3
+    },
+    {
+      "kind": "studyTable",
+      "x": -3.75,
+      "z": -9.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -3.75,
+      "z": -7.1
+    },
+    {
+      "kind": "studyTable",
+      "x": -3.75,
+      "z": -4.7
+    },
+    {
+      "kind": "studyTable",
+      "x": -3.75,
+      "z": -2.3
+    },
+    {
+      "kind": "studyTable",
+      "x": -0.75,
+      "z": -9.5
+    },
+    {
+      "kind": "studyTable",
+      "x": -0.75,
+      "z": -7.1
+    },
+    {
+      "kind": "studyTable",
+      "x": -0.75,
+      "z": -4.7
+    },
+    {
+      "kind": "studyTable",
+      "x": -0.75,
+      "z": -2.3
+    },
+    {
+      "kind": "studyTable",
+      "x": 5.25,
+      "z": -9.5
+    },
+    {
+      "kind": "studyTable",
+      "x": 5.25,
+      "z": -7.1
+    },
+    {
+      "kind": "studyTable",
+      "x": 5.25,
+      "z": -4.7
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.25,
+      "z": -9.5
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.25,
+      "z": -7.1
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.25,
+      "z": -4.7
+    },
+    {
+      "kind": "studyTable-charge",
+      "x": 2,
+      "z": 0.5
+    },
+    {
+      "kind": "column",
+      "x": -13.5,
+      "z": -8
+    },
+    {
+      "kind": "column",
+      "x": -13.5,
+      "z": -4
+    },
+    {
+      "kind": "column",
+      "x": -13.5,
+      "z": 0
+    },
+    {
+      "kind": "column",
+      "x": 13.5,
+      "z": -8
+    },
+    {
+      "kind": "column",
+      "x": 13.5,
+      "z": -4
+    },
+    {
+      "kind": "column",
+      "x": 13.5,
+      "z": 0
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14.5,
+      "z": 6,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14.5,
+      "z": 6,
+      "rotY": 90
+    }
+  ]
+}

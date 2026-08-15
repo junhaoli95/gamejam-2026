@@ -335,6 +335,7 @@ const CSS = `
 .phone-game-title { font: bold 22px sans-serif; color: #fff; }
 .phone-game-subtitle { font: 13px sans-serif; color: rgba(255,255,255,0.7); }
 .phone-restart-btn { margin-top: 6px; background: #2dff7a; color: #000; padding: 8px 24px; border: 0; border-radius: 8px; cursor: pointer; font: bold 14px sans-serif; pointer-events: auto; }
+.phone-menu-btn { margin-top: 8px; background: transparent; color: rgba(255,255,255,0.7); padding: 6px 18px; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; cursor: pointer; font: 12px sans-serif; pointer-events: auto; display: block; margin-left: auto; margin-right: auto; }
 `;
 
 function injectStylesOnce(): void {
@@ -527,32 +528,32 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     </div>
     <div class="phone-app-view map">
       <div class="phone-app-header map">
-        <span class="app-header-back">← 返回 (1)</span>
+        <span class="app-header-back">← Back (1)</span>
         <span class="app-header-title">🗺 MAP</span>
-        <span class="app-header-rate">耗电 ×2</span>
+        <span class="app-header-rate">Power ×2</span>
       </div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
     </div>
     <div class="phone-app-view radar">
       <div class="phone-app-header radar">
-        <span class="app-header-back">← 返回 (2)</span>
+        <span class="app-header-back">← Back (2)</span>
         <span class="app-header-title">📡 RADAR</span>
-        <span class="app-header-rate">耗电 ×3</span>
+        <span class="app-header-rate">Power ×3</span>
       </div>
       <div class="canvas-wrap"><canvas width="220" height="220"></canvas></div>
     </div>
     <div class="phone-app-view query">
       <div class="phone-app-header query">
-        <span class="app-header-back">← 返回 (3)</span>
+        <span class="app-header-back">← Back (3)</span>
         <span class="app-header-title">⚡ QUERY</span>
-        <span class="app-header-rate">耗电 ×4</span>
+        <span class="app-header-rate">Power ×4</span>
       </div>
       <div class="phone-query-legend"></div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
     </div>
   </div>
-  <div class="phone-game-over hidden"><div class="phone-game-title">没电了</div><div class="phone-game-subtitle">手机黑屏,你被困在图书馆</div><button class="phone-restart-btn">再来一局</button></div>
-  <div class="phone-game-win hidden"><div class="phone-game-title">充上电了!</div><div class="phone-game-subtitle">你活了下来</div><button class="phone-restart-btn">再来一局</button></div>
+  <div class="phone-game-over hidden"><div class="phone-game-title">No Power</div><div class="phone-game-subtitle">Your phone died. You're trapped in the library.</div><button class="phone-restart-btn">Retry</button><button class="phone-menu-btn">Menu</button></div>
+  <div class="phone-game-win hidden"><div class="phone-game-title">Charged!</div><div class="phone-game-subtitle">You survived.</div><button class="phone-restart-btn">Retry</button><button class="phone-menu-btn">Menu</button></div>
 </div>`;
 
   root.appendChild(chassis);
@@ -569,6 +570,9 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   const gameWinEl    = chassis.querySelector<HTMLElement>('.phone-game-win')!;
   const restartOverBtn = chassis.querySelector<HTMLElement>('.phone-game-over .phone-restart-btn')!;
   const restartWinBtn  = chassis.querySelector<HTMLElement>('.phone-game-win .phone-restart-btn')!;
+  // PR #28:retry 屏加 Menu 按钮 — 返回标题屏(清 localStorage + reload)
+  const menuOverBtn = chassis.querySelector<HTMLElement>('.phone-game-over .phone-menu-btn')!;
+  const menuWinBtn  = chassis.querySelector<HTMLElement>('.phone-game-win .phone-menu-btn')!;
   const homeEl     = chassis.querySelector<HTMLElement>('.phone-home')!;
   const mapEl     = chassis.querySelector<HTMLElement>('.phone-app-view.map')!;
   const radarEl   = chassis.querySelector<HTMLElement>('.phone-app-view.radar')!;
@@ -595,7 +599,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     { id: 'map',   glyphClass: 'map',    emoji: '🗺', label: 'MAP',   rate: '×2', isReal: true },
     { id: 'radar', glyphClass: 'radar',  emoji: '📡', label: 'RADAR', rate: '×3', isReal: true },
     { id: 'query', glyphClass: 'query',  emoji: '⚡', label: 'QUERY', rate: '×4', isReal: true },
-    { id: 'home',  glyphClass: 'pending', emoji: '🐾', label: '等待安装', isReal: false },
+    { id: 'home',  glyphClass: 'pending', emoji: '🐾', label: 'Pending Install', isReal: false },
   ];
 
   const iconEls: Record<string, HTMLElement> = {};
@@ -607,7 +611,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     icon.classList.add(state);
     const tag = icon.querySelector<HTMLElement>('.phone-app-state-tag');
     if (tag) {
-      tag.textContent = state === 'pending' ? '等待' : state === 'installing' ? '正在安装' : '已安装';
+      tag.textContent = state === 'pending' ? 'Pending' : state === 'installing' ? 'Installing' : 'Installed';
     }
   }
 
@@ -656,7 +660,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-glyph ${icon.glyphClass}">${icon.emoji}</div>
       <div class="phone-app-label">${icon.label}</div>
       ${icon.rate ? `<div class="phone-app-rate">${icon.rate}</div>` : ''}
-      <div class="phone-app-state-tag">等待</div>`;
+      <div class="phone-app-state-tag">Pending</div>`;
     iconEls[icon.id] = cell;
     gridEl.appendChild(cell);
   }
@@ -701,6 +705,13 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     setActiveApp('home');
     opts.onAppAction({ kind: 'restart' });
   });
+  // PR #28:Menu 按钮 — 回标题屏(清 localStorage.titleLevelIndex + reload)
+  function backToTitle(): void {
+    try { localStorage.removeItem('titleLevelIndex'); } catch { /* ignore */ }
+    location.reload();
+  }
+  menuOverBtn.addEventListener('click', backToTitle);
+  menuWinBtn.addEventListener('click', backToTitle);
 
   // ── keyboard ─────────────────────────────────────────────────────────────
   function onKey(e: KeyboardEvent): void {
