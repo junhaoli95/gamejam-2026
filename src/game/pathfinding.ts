@@ -33,7 +33,7 @@ export function findPath(grid: Grid, start: Cell, goal: Cell): Cell[] | null {
         path.push({ x: cur % w, z: Math.floor(cur / w) });
         cur = cameFrom[cur];
       }
-      return path.reverse();
+      return smoothPath(grid, path.reverse());
     }
 
     closed[current] = 1;
@@ -94,5 +94,46 @@ export function findPath(grid: Grid, start: Cell, goal: Cell): Cell[] | null {
       i = smallest;
     }
     return top;
+  }
+}
+
+/**
+ * 折点压缩(string pulling):贪心跳点 —— 从 path[i] 出发,沿原 path 向后找最远的 k,
+ * 使 path[i]→path[k] 这条直线所穿过的所有 grid cell 均为 free,则抛弃 i+1..k-1。
+ * 用 Bresenham 算直线覆盖的 cell,逐个 `isBlocked` 判定。
+ * 结果只保留必要的"拐点"序列,NPC 沿长直线段匀速直行,消除 cell-中心 zigzag。
+ * 保守:用膨胀后 grid 判定,只会少压缩、不会导出穿墙 path。
+ */
+function smoothPath(grid: Grid, path: Cell[]): Cell[] {
+  if (path.length <= 2) return path;
+  const out: Cell[] = [path[0]];
+  let i = 0;
+  while (i < path.length - 1) {
+    let k = path.length - 1;
+    while (k > i + 1) {
+      if (lineClear(grid, path[i], path[k])) break;
+      k--;
+    }
+    out.push(path[k]);
+    i = k;
+  }
+  return out;
+}
+
+/** Bresenham 整数直线:覆盖路径上所有 cell,全 free 返回 true。 */
+function lineClear(grid: Grid, a: Cell, b: Cell): boolean {
+  let x0 = a.x, z0 = a.z;
+  const x1 = b.x, z1 = b.z;
+  const dx = Math.abs(x1 - x0);
+  const dz = Math.abs(z1 - z0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sz = z0 < z1 ? 1 : -1;
+  let err = dx - dz;
+  while (true) {
+    if (isBlocked(grid, { x: x0, z: z0 })) return false;
+    if (x0 === x1 && z0 === z1) return true;
+    const e2 = 2 * err;
+    if (e2 > -dz) { err -= dz; x0 += sx; }
+    if (e2 < dx) { err += dx; z0 += sz; }
   }
 }
