@@ -485,14 +485,6 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   const HELPER_COLOR_STATIC = 0x00aaff;
   const HELPER_COLOR_TABLE = 0x00ff44;
 
-  const socketMat = new THREE.MeshStandardMaterial({
-    color: PLACEHOLDER_COLOR.wallSocket,
-    emissive: 0x2dff7a,
-    emissiveIntensity: 0.9,
-    roughness: 0.4,
-    metalness: 0,
-  });
-
   for (const p of staticPlacements) {
     const dim = MODEL_DIMS[p.kind];
     const placeholder = p.kind === 'bookshelf'
@@ -544,7 +536,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     metalness: 0,
   });
 
-  // PR #13 #4:每个 outlet 对应一个 mesh 数组(柱电位/端板绿点 = 单元素,桌电位 = 双元素,壁插无 mesh = 空数组)。
+  // PR #13 #4:每个 outlet 对应一个 mesh 数组(柱电位/端板/壁插 = 单元素,桌电位 = 双元素)。
   // 与 outletPositions 同序;setOutletOccupied / randomizeOccupiedOutlets 遍历 group 全切色。
   const outletMeshGroups: THREE.Mesh[][] = [];
   // PR #13 #4:table-level outlet 的 4 个座位 key(非桌 outlet 为 null)。
@@ -568,12 +560,15 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     columnOutletMeshes.push(m);
   }
 
-  // 墙壁插:常亮绿(不参与 NPC 占用,空 mesh group),与旧壁插语义一致
+  // 墙壁插:与柱/桌桩同样参与 NPC 占用,材质用 outletMatEmpty(初始绿),
+  // NPC 占用时由 setOutletOccupied 切到 outletMatOccupied(红)。
   const wallSocketGeo = new THREE.BoxGeometry(MODEL_DIMS.wallSocket.w, MODEL_DIMS.wallSocket.h, MODEL_DIMS.wallSocket.d);
+  const wallSocketMeshes: THREE.Mesh[] = [];
   for (const w of outletDraw.walls) {
-    const m = new THREE.Mesh(wallSocketGeo, socketMat);
+    const m = new THREE.Mesh(wallSocketGeo, outletMatEmpty);
     m.position.set(w.x, MODEL_DIMS.wallSocket.h / 2, w.z);
     scene.add(m);
+    wallSocketMeshes.push(m);
   }
 
   // PR #12 §2.5.4 / PR #13 #3:NPC 占位坐姿猫(createSeatedCat,随机毛色+朝向),
@@ -804,10 +799,11 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       outletMeshGroups.push([columnOutletMeshes[ciMesh++]]);
       tableOutletSeatKeys.push(null);
     }
+    let wiMesh = 0;
     for (const w of outletDraw.walls) {
-      outletPositions.push({ x: w.x, z: w.z, occupied: false, occupiable: false });
-      // 壁插常亮(spec §6.2):无切换 mesh 视图(空数组)
-      outletMeshGroups.push([]);
+      outletPositions.push({ x: w.x, z: w.z, occupied: false, occupiable: true });
+      // 壁插现在也参与 NPC 占用(mesh-backed),与柱/桌桩同套 setOutletOccupied 切色
+      outletMeshGroups.push([wallSocketMeshes[wiMesh++]]);
       tableOutletSeatKeys.push(null);
     }
     // study table outlets 由 buildOneStudyTable 内 push(在柱/壁插之后)
@@ -870,7 +866,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
    * 重置全部 outlets.occupied=false + 回绿;table-level outlet 的 occupied 由 4 座位推导
    * (4 椅都坐猫 = 红,1-3 空 = 绿,不参与随机);再从非桌 mesh-backed 桩里用 mulberry32 +
    * Fisher-Yates 挑 count 个标红;清旧 NPC 猫,新坐姿猫放 (o.x, 0.45, o.z + 0.6)。
-   * 壁插(无切换 mesh)排除在外。
+   * 壁插自 NPC-也-抢 改为也参与随机占位(已 mesh-backed)。
    */
   function randomizeOccupiedOutlets(count: number = CONFIG.npc.count, seed: number = NPC_SEED): void {
     // 重置 occupied + 回绿 + 清旧 NPC 猫
@@ -929,7 +925,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     npcMeshes.forEach(m => scene.remove(m));
     npcMeshes.length = 0;
 
-    // 仅非桌 mesh-backed 桩可被随机占位(排除壁插无 mesh + table 座位推导)
+    // 非桌 mesh-backed 桩(柱 + 壁插)可被随机占位;桌桩由 greenCount 总数锁定
     const meshBacked: number[] = [];
     for (let i = 0; i < outletMeshGroups.length; i++) {
       if (outletMeshGroups[i].length > 0 && !tableOutletSeatKeys[i]) meshBacked.push(i);
