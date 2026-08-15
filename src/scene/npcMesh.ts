@@ -1,7 +1,7 @@
 // PR #16 B:NPC 头顶箭头 Sprite + mesh 位置同步。
 // 每只 npcMeshes[i] 对应一个箭头(实心向下三角,CanvasTexture 程序生成,零素材)。
 // update():把 mesh 挪到 entity 位置(猫就是实体的可见化身)+ 箭头跟着头顶 1.2m,
-// 颜色按 state:灰=idle / 黄=moving / 绿=occupying。
+// 颜色按 state:绿=idle(可用) / 橙=wander(闲逛) / 黄=moving(移动) / 红=occupying(已占桩)。
 import * as THREE from 'three';
 import type { NpcEntity } from '../game/npc';
 
@@ -10,12 +10,14 @@ const ARROW_ABOVE_MESH = 1.2; // 头顶 1.2m
 const ARROW_Y = MESH_Y + ARROW_ABOVE_MESH;
 
 const STATE_COLOR: Record<NpcEntity['state'], number> = {
-  idle: 0xc8c8c8,       // rgba(200,200,200) 灰
-  moving: 0xffd24a,     // rgba(255,210,74) 黄
-  occupying: 0x4eff7a,  // rgba(78,255,122) 绿
+  idle: 0x4eff7a,       // rgba(78,255,122) 绿(可用)
+  wander: 0xff9b3a,     // rgba(255,155,58) 橙(闲逛)
+  moving: 0xffd24a,     // rgba(255,210,74) 黄(移动)
+  occupying: 0xff5a5a,  // rgba(255,90,90) 红(已占桩)
 };
 const STATE_OPACITY: Record<NpcEntity['state'], number> = {
   idle: 0.7,
+  wander: 0.9,
   moving: 0.9,
   occupying: 0.9,
 };

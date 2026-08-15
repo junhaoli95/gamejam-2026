@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { Box3, Vector3 } from 'three';
 import { createNpcController, type NpcConfig } from './npc';
-import { toGrid, type Grid } from './gridModel';
+import { toGrid, cellToWorld, type Grid } from './gridModel';
 
 const cfg: NpcConfig = {
   walkSpeed: 2,
   idleMinSec: 0.1,
   idleMaxSec: 0.1,
-  occupyMinSec: 0.2,
-  occupyMaxSec: 0.2,
   arriveDist: 0.5,
+  wanderChance: 0,       // 测试默认不 wander(确定性 → moving)
+  wanderRadius: 4,
 };
 
 // 寻路测试:cellSize 1 时最后 cell 中心离桩 ≤0.707m,arriveDist 需覆盖
@@ -31,7 +31,7 @@ function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: bo
 }
 
 describe('NPC 简化版状态机 (PR #16)', () => {
-  it('完整周期:idle → moving → occupying(占桩变红)→ 离开(回绿)回 idle', () => {
+  it('完整周期:idle → moving → occupying(占桩变红,永久占用 —— 不再释放)', () => {
     const { controller, occupied } = makeHarness([{ x: 20, z: 0 }, { x: 30, z: 0 }]);
     const e = controller.entities[0];
 
@@ -48,11 +48,11 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     expect(e.state).toBe('occupying');
     expect(occupied[0]).toBe(true);
 
-    // 占 0.2s 后离开,桩回绿,回 idle 等下一轮
-    controller.update(0.25);
-    expect(e.state).toBe('idle');
-    expect(occupied[0]).toBe(false);
-    expect(e.targetOutletIndex).toBe(-1);
+    // 占桩后永久保持 —— 长时间过去仍 occupying,桩仍红
+    controller.update(120);
+    expect(e.state).toBe('occupying');
+    expect(occupied[0]).toBe(true);
+    expect(e.targetOutletIndex).toBe(0);
   });
 
   it('目标被玩家/其他 NPC 抢了 → 立刻改选下一个空桩继续走', () => {
@@ -228,7 +228,7 @@ describe('NPC A* 寻路 (PR #17 B)', () => {
     expect(e.targetOutletIndex).toBe(1);
   });
 
-  it('完整周期(有 grid):idle→moving→occupying(红)→idle(绿)', () => {
+  it('完整周期(有 grid):idle→moving→occupying(红,永久 —— 不释放回 idle)', () => {
     const grid = toGrid([], 20, 20, 1);
     const { controller, occupied } = makeHarness([{ x: 4, z: 0 }], undefined, grid);
     const e = controller.entities[0];
@@ -238,8 +238,99 @@ describe('NPC A* 寻路 (PR #17 B)', () => {
     for (let i = 0; i < 100; i++) controller.update(0.1);  // 4m @2m/s = 2s
     expect(e.state).toBe('occupying');
     expect(occupied[0]).toBe(true);
-    controller.update(0.25);  // occupy 0.2s 结束
-    expect(e.state).toBe('idle');
+    controller.update(60);  // 长时间过去 —— 永久占用,不再释放
+    expect(e.state).toBe('occupying');
+    expect(occupied[0]).toBe(true);
+  });
+});
+
+describe('NPC wander + 视线门控 (2026-08-14)', () => {
+  const wanderCfg: NpcConfig = { ...cfg, wanderChance: 1 };  // 必 wander
+
+  function makeWanderHarness(occupiable?: boolean[], grid?: Grid) {
+    const positions = [{ x: 10, z: 0 }, { x: 15, z: 0 }];
+    const occupied = positions.map(() => false);
+    const controller = createNpcController({
+      getOutletCount: () => positions.length,
+      getOutletPos: (i) => positions[i],
+      isOutletOccupied: (i) => occupied[i],
+      setOutletOccupied: (i, occ) => { occupied[i] = occ; },
+      ...(occupiable ? { isOutletOccupiable: (i) => occupiable[i] } : {}),
+      ...(grid ? { grid } : {}),
+      npcCount: 1,
+      cfg: grid ? { ...wanderCfg, arriveDist: 0.8 } : wanderCfg,
+    });
+    return { controller, occupied };
+  }
+
+  it('wander 目标在 radius 内,不占桩', () => {
+    const grid = toGrid([], 20, 20, 1);
+    const { controller, occupied } = makeWanderHarness(undefined, grid);
+    const e = controller.entities[0];
+    e.x = 0; e.z = 0;
+    controller.update(0.15);  // idle 完 → wanderChance=1 → wander
+    expect(e.state).toBe('wander');
+    expect(e.targetOutletIndex).toBe(-1);  // wander 无桩目标
+    expect(e.path.length).toBeGreaterThan(1);
+    const end = e.path[e.path.length - 1];
+    const endWorld = cellToWorld(end, grid);
+    expect(Math.hypot(endWorld.x - 0, endWorld.z - 0)).toBeLessThanOrEqual(wanderCfg.wanderRadius + 0.5);
     expect(occupied[0]).toBe(false);
+    expect(occupied[1]).toBe(false);
+  });
+
+  it('wander 完成 → 回 idle 并重置 idleTimer(真循环,重新掷骰)', () => {
+    const grid = toGrid([], 20, 20, 1);
+    const { controller } = makeWanderHarness(undefined, grid);
+    const e = controller.entities[0];
+    e.x = 0; e.z = 0;
+    controller.update(0.15);  // → wander
+    expect(e.state).toBe('wander');
+    // 走满 20s(wanderRadius 4m ÷ 2m/s ≈ 2s)。wanderChance=1 时走完回 idle(重置 idleTimer)
+    // 后立刻又掷骰 → 再次 wander,所以中途必然出现 idle 瞬间,但结束时可能在 wander 也可能 idle。
+    // 断言:完整跑完后能观测到"wander → idle → wander"循环发生(证明真循环,不是一次性)
+    let sawIdle = false;
+    for (let i = 0; i < 200; i++) {
+      controller.update(0.1);
+      if (e.state === 'idle') sawIdle = true;
+    }
+    expect(sawIdle).toBe(true);  // wander 走完回 idle 至少发生一次(真循环)
+    expect(e.targetOutletIndex).toBe(-1);  // wander 永不设桩目标
+  });
+
+  it('视线阻断时 NPC 完全不动', () => {
+    const grid = toGrid([], 20, 20, 1);
+    // 玩家 (-5,0),NPC (0,0);墙挡在中间 x∈[-2,2] z∈[-1,1](高墙)
+    const wall = { minX: -2, minZ: -1, maxX: 2, maxZ: 1 };
+    const { controller } = makeWanderHarness(undefined, grid);
+    const e = controller.entities[0];
+    e.x = 0; e.z = 0;
+    const losInfo = { playerX: -5, playerZ: 0, losBoxes: [wall] };
+    const beforeX = e.x, beforeZ = e.z, beforeTimer = e.idleTimer, beforeState = e.state;
+    controller.update(60, losInfo);  // 60s 冻结 —— 什么都不该变
+    expect(e.x).toBe(beforeX);
+    expect(e.z).toBe(beforeZ);
+    expect(e.idleTimer).toBe(beforeTimer);
+    expect(e.state).toBe(beforeState);
+  });
+
+  it('有视线时 NPC 照常推进(门控开启但看得到)', () => {
+    const grid = toGrid([], 20, 20, 1);
+    const { controller } = makeWanderHarness(undefined, grid);
+    const e = controller.entities[0];
+    e.x = 0; e.z = 0;
+    // 玩家同侧无遮挡
+    const losInfo = { playerX: -5, playerZ: 0, losBoxes: [] };
+    controller.update(0.15, losInfo);
+    expect(e.state).toBe('wander');
+  });
+
+  it('losInfo===undefined 时不过滤(兼容旧 harness/测试)', () => {
+    const grid = toGrid([], 20, 20, 1);
+    const { controller } = makeWanderHarness(undefined, grid);
+    const e = controller.entities[0];
+    e.x = 0; e.z = 0;
+    controller.update(0.15);  // 不传 losInfo
+    expect(e.state).toBe('wander');  // 正常推进
   });
 });

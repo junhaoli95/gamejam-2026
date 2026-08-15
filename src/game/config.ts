@@ -48,9 +48,9 @@ export const CONFIG = {
     walkSpeed: 2.2,        // PR #16 B:略慢于玩家 walkSpeed 3.0
     idleMinSec: 2,
     idleMaxSec: 5,
-    occupyMinSec: 8,
-    occupyMaxSec: 15,
     arriveDist: 0.8,       // 到桩 0.8m 内 = occupying
+    wanderChance: 0.5,     // idle 结束时掷骰走 wander 的概率(0.5 = 50%)
+    wanderRadius: 4,       // wander 目标点距离上限(m),在 NPC 附近 0~4m 找 free cell
   },
   charging: {
     studyTableGreenRate: 0.05,  // 每局绿桩总数 = round(自习桌数 × rate),60 桌 → 3,15 桌 → 1
