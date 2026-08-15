@@ -13,7 +13,7 @@ import { createNpcController } from './game/npc';
 import { createNpcMeshManager } from './scene/npcMesh';
 import { CONFIG } from './game/config';
 import { mountAudio } from './platform/audio';
-import { mountTitleScreen, hasSelectedBefore } from './ui/titleScreen';
+import { mountTitleScreen, shouldSkipTitleOnReload } from './ui/titleScreen';
 import './style.css';
 
 // --- Renderer ---
@@ -34,17 +34,15 @@ const camera = new THREE.PerspectiveCamera(
 const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
-// --- 点击进入指针锁的提示遮罩 ——
-
-// PR #28:首次访问无 localStorage.titleLevelIndex → 显标题屏(选关)→ reload;
-//        已选过(localStorage 已设)→ 显"点击开始" overlay(音频手势入口)。
+// PR #28:刷新/回访 → 总是显标题屏(除非刚选过关的 reload 用 sessionStorage 一次性跳过);
+// 标题屏选关 → reload → 跳过标题,显"点击开始" overlay(音频手势入口)。
 let gameStarted = false;
 const overlay = document.createElement('div');
 overlay.textContent = 'WASD move (A/D turn) · Shift dash · 1/2/3 apps · E plug in';
 Object.assign(overlay.style, {
   position: 'fixed',
   inset: '0',
-  display: 'none',  // 默认隐藏;只有走"已选关"路径才显
+  display: 'none',  // 默认隐藏;只有"已选关 reload"路径才显
   alignItems: 'center',
   justifyContent: 'center',
   background: 'rgba(20, 16, 10, 0.55)',
@@ -65,10 +63,12 @@ overlay.addEventListener('click', () => {
   audio.startBGM(); // PR #16:首次用户点击启动 BGM(AudioContext 手势内 resume)
 });
 
-if (hasSelectedBefore()) {
-  showStartOverlay();           // 已选关玩家:直接进游戏(待点击开始)
+if (shouldSkipTitleOnReload()) {
+  showStartOverlay();          // 刚选过关的 reload:跳过标题直接进游戏
 } else {
-  mountTitleScreen();            // 首次访问:显标题屏
+  mountTitleScreen({           // 首次/刷新/回标题:总显标题屏
+    onStart: showStartOverlay, // 点已选中的关卡 → 直接开始(布局已加载)
+  });
 }
 
 // PR #12 §2.5.2/§2.5.5:胜利 / 失败状态(共态,影响 main loop 早退 + getSharedState wrap)
