@@ -1,13 +1,17 @@
 // PR #16 B:NPC AI 简化版 —— 纯 TS 状态机,零 DOM/Three 依赖,可单测。
-// 状态机:idle(随机停 2-5s)→ moving(A* 寻路走向最近空桩)→ occupying(占 8-15s)→ idle。
+// 状态机:idle(随机停 2-5s)→ wander(50% 闲逛)或 moving(A* 寻路走向最近空桩)
+//         → occupying(永久占用,不再释放)。wander 到点回 idle 重新掷骰(真循环)。
 // 目标被抢(occupied)→ 立刻改选下一个空桩。PR #17 B:接入 gridModel+pathfinding,A* 绕障;
 // 无 grid(旧 harness)→ 退化为直线走 + resolveCollision。
+// 视线门控(losInfo):玩家看不到的 NPC 整体跳过 update —— 不计时、不动、不掷骰(冻结)。
 
 import type { Cell, Grid } from './gridModel';
 import { worldToCell, cellToWorld, isBlocked } from './gridModel';
 import { findPath } from './pathfinding';
+import { hasLineOfSight } from './los';
+import type { Aabb2D } from './los';
 
-export type NpcState = 'idle' | 'moving' | 'occupying';
+export type NpcState = 'idle' | 'wander' | 'moving' | 'occupying';
 
 export interface NpcEntity {
   x: number;
@@ -15,7 +19,6 @@ export interface NpcEntity {
   state: NpcState;
   targetOutletIndex: number;  // -1 = 无目标
   idleTimer: number;          // idle 阶段倒计时
-  occupyTimer: number;        // occupying 阶段倒计时
   meshIndex: number;          // 对应 scene npcMeshes 数组 index
   path: Cell[];               // PR #17 B:当前 A* 路径(cell 序列,path[0]=起点 cell)
   pathIdx: number;            // 当前正在走向 path[pathIdx]
@@ -27,9 +30,18 @@ export interface NpcConfig {
   walkSpeed: number;
   idleMinSec: number;
   idleMaxSec: number;
-  occupyMinSec: number;
-  occupyMaxSec: number;
   arriveDist: number;
+  /** idle 结束时掷骰走 wander 的概率(0~1) */
+  wanderChance: number;
+  /** wander 目标点距离上限(m) */
+  wanderRadius: number;
+}
+
+/** 视线门控输入:玩家位置 + 遮挡盒(losBoxes 已过滤矮家具)。传 undefined = 不过滤(测试/旧 harness 兼容)。 */
+export interface NpcLosInfo {
+  playerX: number;
+  playerZ: number;
+  losBoxes: Aabb2D[];
 }
 
 export interface NpcControllerOptions {
@@ -49,7 +61,7 @@ export interface NpcControllerOptions {
 
 export interface NpcController {
   entities: NpcEntity[];
-  update: (dt: number) => void;
+  update: (dt: number, losInfo?: NpcLosInfo) => void;
   reset: (seed?: number) => void;
   /** PR #16 fix:对全部实体跑一次碰撞推出(初始化 sync 后调用,清初始嵌柱) */
   resolveAll: () => void;
@@ -93,7 +105,10 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     }
   }
 
-  /** 遍历所有 outlets,找 isOutletOccupied(i)===false 且可占(非壁插)的最近一个;-1 = 无可选。exclude:跳过某桩(不可达重选用)。 */
+  /** 遍历所有 outlets,找 isOutletOccupied(i)===false 且可占(非壁插)的最近一个;-1 = 无可选。exclude:跳过某桩(不可达重选用)。
+   *  保底 N+1:玩家有桩可充由 main.ts 启动时校验 NPC 数 + 初始预占 ≤ 总桩 - 1 保证 ——
+   *  不在此函数里检查 freeCount(那样会让单元测试只用 1~3 桩时无法模拟普通占用流程)。
+   */
   function pickNearestFreeOutlet(fromX: number, fromZ: number, exclude = -1): number {
     let best = -1;
     let bestDist = Infinity;
@@ -159,6 +174,31 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     return -1;
   }
 
+  /** wander:在 NPC 附近 wanderRadius 球内随机找一个 free cell 作目标;找不到 → false(回 idle)。 */
+  function pickWanderTarget(e: NpcEntity): boolean {
+    const grid = opts.grid;
+    if (!grid) return false;  // 无 grid 直接回 idle(不随机走直线,避免飘)
+    const start = nearestFreeCell(grid, e.x, e.z);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const ang = rng() * Math.PI * 2;
+      const r = rng() * cfg.wanderRadius;
+      const cx = e.x + Math.cos(ang) * r;
+      const cz = e.z + Math.sin(ang) * r;
+      const goal = nearestFreeCell(grid, cx, cz);
+      if (goal.x === start.x && goal.z === start.z) continue;  // 目标=起点,重抽
+      const path = findPath(grid, start, goal);
+      if (path) {
+        e.targetOutletIndex = -1;  // wander 无桩目标
+        e.path = path;
+        e.pathIdx = 1;
+        e.pathX = e.path.map(c => cellToWorld(c, grid).x);
+        e.pathZ = e.path.map(c => cellToWorld(c, grid).z);
+        return true;
+      }
+    }
+    return false;  // 8 次都没找到 → 回 idle
+  }
+
   function randRange(rng: () => number, min: number, max: number): number {
     return min + rng() * (max - min);
   }
@@ -175,7 +215,6 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       state: 'idle',
       targetOutletIndex: -1,
       idleTimer: newIdleTimer(),
-      occupyTimer: 0,
       meshIndex: i,
       path: [],
       pathX: [],
@@ -184,17 +223,55 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     });
   }
 
-  function update(dt: number): void {
+  function update(dt: number, losInfo?: NpcLosInfo): void {
     for (const e of entities) {
+      // 视线门控:玩家看不到的 NPC 整体冻结(不计时、不动、不掷骰)。
+      // losInfo === undefined(旧 harness/测试)→ 不过滤。
+      if (losInfo && !hasLineOfSight(losInfo.playerX, losInfo.playerZ, e.x, e.z, losInfo.losBoxes)) {
+        continue;
+      }
       if (e.state === 'idle') {
         e.idleTimer -= dt;
         if (e.idleTimer <= 0) {
-          const t = pickReachableOutlet(e);
-          if (t >= 0) {
-            e.state = 'moving';
+          // 掷骰:可能去闲逛(wander),也可能直接去抢桩(moving)
+          const goWander = rng() < cfg.wanderChance && pickWanderTarget(e);
+          if (goWander) {
+            e.state = 'wander';
           } else {
-            e.idleTimer = newIdleTimer();  // 全占/全不可达,再等一轮
+            const t = pickReachableOutlet(e);
+            if (t >= 0) {
+              e.state = 'moving';
+            } else {
+              e.idleTimer = newIdleTimer();  // 全占/全不可达,再等一轮
+            }
           }
+        }
+      } else if (e.state === 'wander') {
+        // 闲逛:逐 waypoint 走到目标 free cell,走完回 idle(真循环,重新掷骰)
+        let remaining = cfg.walkSpeed * dt;
+        while (remaining > 1e-9 && e.pathIdx < e.path.length) {
+          const cwX = e.pathX[e.pathIdx];
+          const cwZ = e.pathZ[e.pathIdx];
+          const dx = cwX - e.x;
+          const dz = cwZ - e.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist <= remaining) {
+            e.x = cwX;
+            e.z = cwZ;
+            remaining -= dist;
+            e.pathIdx++;
+          } else {
+            e.x += (dx / dist) * remaining;
+            e.z += (dz / dist) * remaining;
+            remaining = 0;
+          }
+        }
+        if (e.pathIdx >= e.path.length) {
+          resolveCollision(e);
+          e.state = 'idle';
+          e.idleTimer = newIdleTimer();  // 重新掷骰 → 可能再 wander 或 moving
+        } else {
+          resolveCollision(e);
         }
       } else if (e.state === 'moving') {
         // 目标被别人抢了(自己占的只会发生在 arrive 同帧,已切 occupying)→ 改选下一个空桩
@@ -230,14 +307,15 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
               remaining = 0;
             }
           }
-          // 到达判定:path 走完 且 距桩 ≤ arriveDist(桩可能在 blocked cell,nearestFreeCell 是桩旁)
+          // 到达判定:path 走完 = 到达(A* 终点已是桩旁 nearestFreeCell;dist 门限会误杀
+          //   桩压 cell 边界的情形——如 cell 中心离桩 0.83m > arriveDist 0.8m,NPC 被锁原地)。
+          //   因此只看 pathIdx,不再叠加 dist 条件。
           const dx = p.x - e.x;
           const dz = p.z - e.z;
           const distToOutlet = Math.hypot(dx, dz);
-          if (e.pathIdx >= e.path.length && distToOutlet <= cfg.arriveDist) {
+          if (e.pathIdx >= e.path.length) {
             resolveCollision(e);
             e.state = 'occupying';
-            e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);
             opts.setOutletOccupied(e.targetOutletIndex, true);
           } else {
             // 未到:若 path 已走完但桩还远(最后一个 cell 中心不可达)→ 沿路径方向直线逼近
@@ -260,7 +338,6 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
             // 若推出后仍在柱内(多柱重叠/极端),沿来路反向退 0.5m 兜底。
             resolveCollision(e);
             e.state = 'occupying';
-            e.occupyTimer = randRange(rng, cfg.occupyMinSec, cfg.occupyMaxSec);
             opts.setOutletOccupied(e.targetOutletIndex, true);
           } else {
             const step = Math.min(cfg.walkSpeed * dt, dist);  // 防超调过头
@@ -270,13 +347,8 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
           }
         }
       } else {
-        e.occupyTimer -= dt;
-        if (e.occupyTimer <= 0) {
-          opts.setOutletOccupied(e.targetOutletIndex, false);
-          e.targetOutletIndex = -1;
-          e.state = 'idle';
-          e.idleTimer = newIdleTimer();
-        }
+        // 占用即永久(NPC 占桩后不再释放,桩单向消耗)。
+        // occupyTimer / idle 退出逻辑已移除 —— 一旦 occupying,本局此 NPC 不再变 state。
       }
     }
   }
@@ -292,7 +364,6 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       e.pathZ = [];
       e.pathIdx = 0;
       e.idleTimer = newIdleTimer();
-      e.occupyTimer = 0;
     }
   }
 

@@ -6,7 +6,7 @@ export interface SharedState {
   battery: number;
   pips: number;
   outlets: Array<{ x: number; z: number; occupied: boolean }>;
-  npcs: Array<{ x: number; z: number; state: 'idle' | 'moving' | 'occupying'; targetIndex?: number }>;
+  npcs: Array<{ x: number; z: number; state: 'idle' | 'wander' | 'moving' | 'occupying'; targetIndex?: number }>;
   path?: Array<{ x: number; z: number }>;
   won?: boolean;
   // PR #13 stub 字段(Snake prep,spec §2 / §8.1)——Sam/David 各 pull 后填充真实值

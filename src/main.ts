@@ -182,6 +182,17 @@ function syncNpcPositionsToMeshes(): void {
     const m = meshes[i];
     if (m) { e.x = m.position.x; e.z = m.position.z; }
   });
+
+// 有解保底校验:开局即检查 at least 1 个空桩留给玩家(运行时 NPC 占桩不再释放 → 单向消耗)
+// 初始预占数 + NPC 数 ≤ 总桩 - 1 保证玩家永远有可充之桩。不满足时 console.warn。
+{
+  let occupiedStart = 0;
+  for (const o of outlets) if (o.occupied) occupiedStart++;
+  const safetyMargin = (outlets.length) - occupiedStart - CONFIG.npc.count;
+  if (safetyMargin < 1) {
+    console.warn(`[layout] 配置警告:总桩 ${outlets.length} - 初始预占 ${occupiedStart} - NPC ${CONFIG.npc.count} = ${safetyMargin} < 1,玩家可能无桩可充。请降低 NPC 数或 studyTableGreenRate。`);
+  }
+}
   npcController.resolveAll();  // PR #16 fix:初始嵌柱推出
 }
 syncNpcPositionsToMeshes();
@@ -249,7 +260,8 @@ function animate() {
     playerStats.step(dt, input);
     controller.update(dt);
     // PR #16 B:NPC 状态机推进 + 头顶箭头/mesh 同步
-    npcController.update(dt);
+    // 视线门控:传 losInfo(玩家位置 + 遮挡盒),玩家看不到的 NPC 冻结
+    npcController.update(dt, { playerX: player.position.x, playerZ: player.position.z, losBoxes: toLosBoxes(colliders) });
     npcMeshManager.update(npcController.entities);
     // debug 调试模式:关闭倒计时(battery 锁 10% 不掉) — __debug.noDrain = true 启用
     if (debugNoDrain) runtime.battery = Math.max(runtime.battery, CONFIG.battery.startPercent);
