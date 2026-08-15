@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createLibraryScene, DEFAULT_DEBUG_PARAMS } from './scene/loadLibraryScene';
+import { createLibraryScene, DEFAULT_DEBUG_PARAMS, getLevelNpcCount } from './scene/loadLibraryScene';
 import { createThirdPersonController } from './player/thirdPersonController';
 import { createSharedStateFacade } from './platform/sharedState';
 import { mountPhoneHud } from './ui/phoneHud';
@@ -124,6 +124,10 @@ function getSharedState() {
   const s = getRawSharedState();
   // PR #13 #9:近空桩标志(每帧算一次,供 gtaPrompt 显隐左上 prompt)
   const nearOutlet = !!findNearOutlet(s.outlets, s.player.x, s.player.z);
+  // spec 2026-08-15 §5.3:非自习桌空桩数 = 柱电位 + 壁插中 occupied=false 的数量。
+  // NPC 抢桩门控消费(≤1 时 NPC 拒绝 idle→moving,给玩家留最后 1 充点)。
+  const freeMeshGreenCount = s.outlets.reduce(
+    (acc, o) => acc + (!o.occupied && o.kind === 'mesh' ? 1 : 0), 0);
   return {
     ...s,
     battery: runtime.battery,
@@ -131,6 +135,7 @@ function getSharedState() {
     won: gameWon,
     terrain,
     nearOutlet,
+    freeMeshGreenCount,
     // PR #16 B:NPC 位置 + 状态,供箭头/UI 消费
     npcs: npcController.entities.map(e => ({ x: e.x, z: e.z, state: e.state, targetIndex: e.targetOutletIndex })),
   };
@@ -153,7 +158,8 @@ mountPhoneHud({
       playerStats.reset();
       player.position.set(0, 0, 8.5);
       // PR #13 #5:新 seed,每局 NPC 占位分布不同(QTE 方案已砍,无 state 需重置)
-      randomizeOccupiedOutlets(CONFIG.npc.count, (Date.now() % 100000));
+      // spec 2026-08-15:红桩数 = 布局 meshNpcCount(缺省 CONFIG.npc.count),与 NpcSystem 实体数一致
+      randomizeOccupiedOutlets(getLevelNpcCount(), (Date.now() % 100000));
       // PR #16 B:重开新局,NPC 状态重置 + 位置对齐新摆的坐姿猫
       npcController.reset(Date.now() % 100000);
       syncNpcPositionsToMeshes();
@@ -170,8 +176,9 @@ mountMissionToast({ getSharedState });
 mountHighScore({ getSharedState });
 
 // --- PR #16 B:NPC AI(状态机 + 头顶箭头)---
+// spec 2026-08-15 §5.3:freeMeshGreenCount 每帧更新(非自习桌空桩数),NPC idle→moving 门控用。
 const npcMeshManager = createNpcMeshManager(scene, getNpcMeshes());
-const npcController = createNpcController({
+const npcOpts: Parameters<typeof createNpcController>[0] = {
   getOutletCount: () => outlets.length,
   getOutletPos: (i) => ({ x: outlets[i].x, z: outlets[i].z }),
   isOutletOccupied: (i) => outlets[i].occupied,
@@ -181,11 +188,13 @@ const npcController = createNpcController({
   // PR #17 B:A* 寻路网格(cellSize 0.4;inflate=NPC 半径 0.38 → path 保持 ≥0.38m 离墙,
   // 避免 NPC 圆盘边缘擦 collider 被 resolveCollision 推出卡死)
   grid: toGrid(colliders, CONFIG.world.w, CONFIG.world.d, CONFIG.world.cellSize, 0.38),
-  npcCount: CONFIG.npc.count,
+  npcCount: getLevelNpcCount(),  // spec 2026-08-15 §3.3:layout 优先,CONFIG 兜底(NpcSystem 实体数 = 红桩数)
   cfg: CONFIG.npc,
   // PR #16 fix:colliders 转轻量 AABB 给 NPC 防穿墙(与 player 同源)
   colliders: colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z })),
-});
+  freeMeshGreenCount: Infinity,  // 门控默认关闭;每帧在 game loop 更新
+};
+const npcController = createNpcController(npcOpts);
 
 // 实体初始位置对齐场景已就座猫(randomizeOccupiedOutlets 摆位),避免开局瞬移
 function syncNpcPositionsToMeshes(): void {
@@ -200,9 +209,10 @@ function syncNpcPositionsToMeshes(): void {
 {
   let occupiedStart = 0;
   for (const o of outlets) if (o.occupied) occupiedStart++;
-  const safetyMargin = (outlets.length) - occupiedStart - CONFIG.npc.count;
+  const npcN = getLevelNpcCount();
+  const safetyMargin = (outlets.length) - occupiedStart - npcN;
   if (safetyMargin < 1) {
-    console.warn(`[layout] 配置警告:总桩 ${outlets.length} - 初始预占 ${occupiedStart} - NPC ${CONFIG.npc.count} = ${safetyMargin} < 1,玩家可能无桩可充。请降低 NPC 数或 studyTableGreenRate。`);
+    console.warn(`[layout] 配置警告:总桩 ${outlets.length} - 初始预占 ${occupiedStart} - NPC ${npcN} = ${safetyMargin} < 1,玩家可能无桩可充。请降低 NPC 数或 studyTableGreenRate。`);
   }
 }
   npcController.resolveAll();  // PR #16 fix:初始嵌柱推出
@@ -273,6 +283,9 @@ function animate() {
     controller.update(dt);
     // PR #16 B:NPC 状态机推进 + 头顶箭头/mesh 同步
     // 视线门控:传 losInfo(玩家位置 + 遮挡盒),玩家看不到的 NPC 冻结
+    // spec 2026-08-15 §5.3:先算非自习桌空桩数再喂 NPC(抢桩门控消费)
+    npcOpts.freeMeshGreenCount = outlets.reduce(
+      (acc, o) => acc + (!o.occupied && o.kind === 'mesh' ? 1 : 0), 0);
     npcController.update(dt, { playerX: player.position.x, playerZ: player.position.z, losBoxes: toLosBoxes(colliders) });
     npcMeshManager.update(npcController.entities);
     // debug 调试模式:关闭倒计时(battery 锁 10% 不掉) — __debug.noDrain = true 启用

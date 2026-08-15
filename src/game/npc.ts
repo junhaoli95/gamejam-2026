@@ -57,6 +57,9 @@ export interface NpcControllerOptions {
   isOutletOccupiable?: (i: number) => boolean;
   /** PR #17 B:A* 寻路网格(缺省 = 直线走,兼容旧测试)。rebuild 后须由调用方更新。 */
   grid?: Grid;
+  /** PR #27 门控(2026-08-15):场上非自习桌绿桩数。≤1 时 NPC idle 不再抢桩(给玩家留最后 1 充点)。
+   *  缺省 = Infinity → 门控不触发(旧测试/无布局 harness 兼容)。main.ts 每帧更新该字段。 */
+  freeMeshGreenCount?: number;
 }
 
 export interface NpcController {
@@ -238,11 +241,17 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
           if (goWander) {
             e.state = 'wander';
           } else {
-            const t = pickReachableOutlet(e);
-            if (t >= 0) {
-              e.state = 'moving';
+            // ★ 抢桩门控(2026-08-15):场上非自习桌绿桩 ≤ 1 → 拒绝 idle→moving(不抢最后 1 充点)。
+            // wander 不受门控(wander 不抢桩);已占用(moving 完成)的桩不撤 —— 只挡新抢。
+            if ((opts.freeMeshGreenCount ?? Infinity) <= 1) {
+              e.idleTimer = newIdleTimer();  // 等下一轮再掷骰
             } else {
-              e.idleTimer = newIdleTimer();  // 全占/全不可达,再等一轮
+              const t = pickReachableOutlet(e);
+              if (t >= 0) {
+                e.state = 'moving';
+              } else {
+                e.idleTimer = newIdleTimer();  // 全占/全不可达,再等一轮
+              }
             }
           }
         }

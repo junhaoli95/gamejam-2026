@@ -5,7 +5,9 @@ export interface SharedState {
   player: { x: number; z: number; yaw: number };
   battery: number;
   pips: number;
-  outlets: Array<{ x: number; z: number; occupied: boolean }>;
+  outlets: Array<{ x: number; z: number; occupied: boolean; kind?: 'mesh' | 'table' }>;
+  /** 非"自习桌"的空(未占)桩数 = 柱电位 + 壁插中 occupied=false 的数量。每帧 update 时算一次(spec 2026-08-15 §5.3)。 */
+  freeMeshGreenCount: number;
   npcs: Array<{ x: number; z: number; state: 'idle' | 'wander' | 'moving' | 'occupying'; targetIndex?: number }>;
   path?: Array<{ x: number; z: number }>;
   won?: boolean;
@@ -30,7 +32,7 @@ export interface SharedStateFacade {
 export function createSharedStateFacade(
   player: THREE.Group,
   controller: ThirdPersonController,
-  outlets: Array<{ x: number; z: number; occupied?: boolean }>,
+  outlets: Array<{ x: number; z: number; occupied?: boolean; kind?: 'mesh' | 'table' }>,
 ): SharedStateFacade {
   return {
     getSharedState: () => ({
@@ -41,7 +43,8 @@ export function createSharedStateFacade(
       },
       battery: 1.0,
       pips: 3,
-      outlets: outlets.map(o => ({ x: o.x, z: o.z, occupied: o.occupied ?? false })),
+      outlets: outlets.map(o => ({ x: o.x, z: o.z, occupied: o.occupied ?? false, kind: o.kind })),
+      freeMeshGreenCount: 0,
       npcs: [],
       path: undefined,
       // PR #13 stub(Snake prep,spec §8.1)—— David main.ts wrap 会覆盖为真实值
