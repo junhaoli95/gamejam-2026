@@ -1,16 +1,39 @@
 // PR #28:标题屏 + 选关(两阶段 CSS overlay,纯 DOM,不跑 3D。
-// Stage 1 标题 CHARGE → Start Game → Stage 2 选关(6 按钮含 Random)→
-// 点任一关 → localStorage.titleLevelIndex = N → location.reload()。
-// 已选过(localStorage 已设)→ main.ts 直接走"点击开始" overlay,不 mount 本模块。
+// Stage 1 标题 CHARGE → Start Game → Stage 2 选关(6 按钮含 Random)。
+//
+// 流程:
+// - 首次/刷新(无 session 标记)→ 总是显示标题(Stage 2 高亮已选关卡,默认 Islands)
+// - 点任一关 → localStorage.titleLevelIndex = N + sessionStorage 标记 → location.reload()
+// - reload 后检测 session 标记(读后即删)→ 跳过标题,直接走"点击开始" overlay
+// - 点"已选中的关卡"→ 无需 reload(布局已加载)→ 直接 onStart 开始
+// - Menu/再来一局:回标题 = 清 localStorage + reload(无 session 标记 → 标题出现)
 
 const LS_KEY = 'titleLevelIndex';
+const SS_KEY = 'titleJustSelected';  // sessionStorage 一次性标记:刚选完关的 reload 跳过标题
 
-/** localStorage 是否已设过 titleLevelIndex(已选关玩家)。main.ts 据此跳过标题。 */
-export function hasSelectedBefore(): boolean {
+interface TitleScreenOptions {
+  /** 开始游戏(布局已加载时直接进)— 由 main.ts 提供,显示"点击开始" overlay(音频手势入口)。 */
+  onStart: () => void;
+}
+
+/** 是否跳过标题直接进游戏:仅当刚选过关(sessionStorage 一次性标记)。读后即删。 */
+export function shouldSkipTitleOnReload(): boolean {
+  try {
+    if (sessionStorage.getItem(SS_KEY)) {
+      sessionStorage.removeItem(SS_KEY);
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
+/** 当前已选关卡 index(1-5;无/非法 → 默认 4=Islands)。 */
+function currentSelected(): number {
   try {
     const v = Number(localStorage.getItem(LS_KEY));
-    return Number.isInteger(v) && v >= 1 && v <= 5;
-  } catch { return false; }
+    if (Number.isInteger(v) && v >= 1 && v <= 5) return v;
+  } catch { /* ignore */ }
+  return 4;
 }
 
 interface LevelDef { index: number; name: string; sub: string; }
@@ -24,8 +47,6 @@ const LEVELS: LevelDef[] = [
   { index: 4, name: 'Islands',       sub: '17 tables  ·  default' },
   { index: 5, name: 'Arena',         sub: '9 tables' },
 ];
-
-const DEFAULT_INDEX = 4;  // Islands
 
 const CSS = `
 .title-root{position:fixed;inset:0;z-index:50;background:rgba(15,12,9,0.96);
@@ -55,7 +76,7 @@ const CSS = `
 .title-back{margin-top:18px;font-size:14px;padding:8px 22px;opacity:0.8;}
 `;
 
-export function mountTitleScreen(): void {
+export function mountTitleScreen(opts: TitleScreenOptions): void {
   const root = document.createElement('div');
   root.className = 'title-root';
 
@@ -85,12 +106,13 @@ export function mountTitleScreen(): void {
   heading.textContent = 'Select Level';
   stage2.appendChild(heading);
 
+  const selected = currentSelected();  // 高亮已选关卡(刷新回标题时记住)
   const rowWrap = document.createElement('div');
   rowWrap.className = 'title-level-row';
   for (const lv of LEVELS) {
     const b = document.createElement('button');
     b.className = 'title-level-btn';
-    if (lv.index === DEFAULT_INDEX) b.classList.add('selected');
+    if (lv.index !== 0 && lv.index === selected) b.classList.add('selected');
     const nameEl = document.createElement('span');
     nameEl.className = 'lvl-name';
     nameEl.textContent = lv.name;
@@ -103,7 +125,14 @@ export function mountTitleScreen(): void {
       const idx = lv.index === 0
         ? 1 + Math.floor(Math.random() * 5)  // Random:5 pick 1
         : lv.index;
+      if (lv.index !== 0 && idx === selected) {
+        // 点已选中的关卡:布局已加载,无需 reload → 直接开始
+        root.style.display = 'none';
+        opts.onStart();
+        return;
+      }
       try { localStorage.setItem(LS_KEY, String(idx)); } catch { /* ignore */ }
+      try { sessionStorage.setItem(SS_KEY, '1'); } catch { /* ignore */ }
       location.reload();
     });
     rowWrap.appendChild(b);
