@@ -334,3 +334,44 @@ describe('NPC wander + 视线门控 (2026-08-14)', () => {
     expect(e.state).toBe('wander');  // 正常推进
   });
 });
+
+describe('NPC 抢桩门控(非自习桌绿桩 ≤1 时拒绝 idle→moving,2026-08-15)', () => {
+  it('freeMeshGreenCount=1 + idleTimer<=0 → 保持 idle,不切 moving(不抢最后绿桩)', () => {
+    const controller = createNpcController({
+      getOutletCount: () => 1,
+      getOutletPos: () => ({ x: 5, z: 0 }),
+      isOutletOccupied: () => false,
+      setOutletOccupied: () => {},
+      npcCount: 1,
+      cfg,
+      freeMeshGreenCount: 1,
+    });
+    const e = controller.entities[0];
+    controller.update(0.15);  // idle 0.1s 后到点,门控应拒绝
+    expect(e.state).toBe('idle');
+    expect(e.targetOutletIndex).toBe(-1);
+  });
+
+  it('freeMeshGreenCount=2 + idleTimer<=0 + 有空桩 → 正常切 moving(原行为)', () => {
+    const controller = createNpcController({
+      getOutletCount: () => 1,
+      getOutletPos: () => ({ x: 5, z: 0 }),
+      isOutletOccupied: () => false,
+      setOutletOccupied: () => {},
+      npcCount: 1,
+      cfg,
+      freeMeshGreenCount: 2,
+    });
+    const e = controller.entities[0];
+    controller.update(0.15);
+    expect(e.state).toBe('moving');
+    expect(e.targetOutletIndex).toBe(0);
+  });
+
+  it('缺省(未传 freeMeshGreenCount)→ 门控不触发,兼容旧 harness', () => {
+    const { controller } = makeHarness([{ x: 5, z: 0 }]);
+    const e = controller.entities[0];
+    controller.update(0.15);
+    expect(e.state).toBe('moving');  // 原行为
+  });
+});
