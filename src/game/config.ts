@@ -57,6 +57,6 @@ export const CONFIG = {
   },
   hud: {
     promptRange: 1.5,       // 近空桩触发左上 GTA prompt 距离(米),spec §4.1
-    objectiveText: '电量耗尽之前找到充电位置',  // 中下常驻任务条文案
+    objectiveText: 'Find a charging point before the battery dies',  // 中下常驻任务条文案(PR #28 英文化)
   },
 } as const;

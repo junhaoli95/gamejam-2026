@@ -133,7 +133,7 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
     fadeTimer = window.setTimeout(() => {
       // 换内容
       promptIconEl.textContent = mode === 'charge' ? '⚡' : '📍';
-      promptTextEl.textContent = mode === 'charge' ? '按 [E] 充电' : opts.objectiveText;
+      promptTextEl.textContent = mode === 'charge' ? 'Press [E] to charge' : opts.objectiveText;
       // 淡入
       promptEl.classList.remove('fading');
     }, 80);

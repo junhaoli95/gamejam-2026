@@ -13,6 +13,7 @@ import { createNpcController } from './game/npc';
 import { createNpcMeshManager } from './scene/npcMesh';
 import { CONFIG } from './game/config';
 import { mountAudio } from './platform/audio';
+import { mountTitleScreen, hasSelectedBefore } from './ui/titleScreen';
 import './style.css';
 
 // --- Renderer ---
@@ -33,13 +34,17 @@ const camera = new THREE.PerspectiveCamera(
 const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
-// --- 点击进入指针锁的提示遮罩 ---
+// --- 点击进入指针锁的提示遮罩 ——
+
+// PR #28:首次访问无 localStorage.titleLevelIndex → 显标题屏(选关)→ reload;
+//        已选过(localStorage 已设)→ 显"点击开始" overlay(音频手势入口)。
+let gameStarted = false;
 const overlay = document.createElement('div');
-overlay.textContent = 'WASD 移动(AD 转向)· Shift 冲刺 · 1/2/3 切 app · E 插枪';
+overlay.textContent = 'WASD move (A/D turn) · Shift dash · 1/2/3 apps · E plug in';
 Object.assign(overlay.style, {
   position: 'fixed',
   inset: '0',
-  display: 'flex',
+  display: 'none',  // 默认隐藏;只有走"已选关"路径才显
   alignItems: 'center',
   justifyContent: 'center',
   background: 'rgba(20, 16, 10, 0.55)',
@@ -51,13 +56,20 @@ Object.assign(overlay.style, {
 });
 document.body.appendChild(overlay);
 
-// PR #12 §2.5.2:点击 overlay 直接开始(无 pointer lock);commit 5 加 gameStarted 标志主循环门控
-let gameStarted = false;
+function showStartOverlay(): void {
+  overlay.style.display = 'flex';
+}
 overlay.addEventListener('click', () => {
   overlay.style.display = 'none';
   gameStarted = true;
   audio.startBGM(); // PR #16:首次用户点击启动 BGM(AudioContext 手势内 resume)
 });
+
+if (hasSelectedBefore()) {
+  showStartOverlay();           // 已选关玩家:直接进游戏(待点击开始)
+} else {
+  mountTitleScreen();            // 首次访问:显标题屏
+}
 
 // PR #12 §2.5.2/§2.5.5:胜利 / 失败状态(共态,影响 main loop 早退 + getSharedState wrap)
 let gameWon = false;      // 走近空桩按 E → true
@@ -151,7 +163,7 @@ mountPhoneHud({
 
 // PR #13 §3.4:GTA 提示系统 mount(左上 prompt + 中下任务条)
 // TODO PR #13-David merge 后改 CONFIG.hud.objectiveText(Sam 先硬编码)
-mountGtaPrompt({ getSharedState, objectiveText: '电量耗尽之前找到充电位置' });
+mountGtaPrompt({ getSharedState, objectiveText: CONFIG.hud.objectiveText });  // PR #28:读 CONFIG,英文化集中管理
 
 // PR #16 §2.3 奖励系统 mount(mountGtaPrompt 之后)
 mountMissionToast({ getSharedState });

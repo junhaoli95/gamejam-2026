@@ -2,6 +2,21 @@ import * as THREE from 'three';
 import { loadGlbNormalized } from '../../snippets/loadGlb';
 import { CONFIG } from '../game/config';
 import layout from './layout.json';
+// PR #28 标题屏选关 — 4 个布局快照(Sam PR #24 验过的 5 个布局,Islands = layout.json):
+import layout1 from './layouts/layout1.json';  // Open Lobby(7桌)
+import layout2 from './layouts/layout2.json';  // Compact Study(19桌)
+import layout3 from './layouts/layout3.json';  // Maze(7桌)
+import layout5 from './layouts/layout5.json';  // Arena(9桌)
+
+// 标题屏已选过的布局 index(localStorage 持久,1-5;默认 4 = Islands)
+function readLevelIndex(): number {
+  try {
+    const v = Number(localStorage.getItem('titleLevelIndex'));
+    return Number.isInteger(v) && v >= 1 && v <= 5 ? v : 4;
+  } catch { return 4; }  // SSR/无 localStorage 环境
+}
+const LEVEL_INDEX = readLevelIndex();
+const LAYOUT_BY_INDEX: LayoutData[] = [layout1, layout2, layout3, layout, layout5];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Library scene (布局数据驱动 v7 — 家具坐标唯一真相源 = src/scene/layout.json)
@@ -86,7 +101,7 @@ interface LayoutData {
   placements: LayoutPlacement[];
 }
 
-const LAYOUT: LayoutData = layout;
+const LAYOUT: LayoutData = LAYOUT_BY_INDEX[LEVEL_INDEX - 1];  // PR #28:标题屏选关(LEVEL_INDEX 1-5;默认 4=Islands=layout.json)
 
 // 房间尺寸唯一真相源 = layout.json(编辑器保存 → HMR 生效;save-server 同步 CONFIG.world)
 const ROOM_W = LAYOUT.room.w;
