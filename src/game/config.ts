@@ -54,6 +54,8 @@ export const CONFIG = {
   },
   charging: {
     studyTableGreenRate: 0.05,  // 每局绿桩总数 = round(自习桌数 × rate),60 桌 → 3,15 桌 → 1
+    meshGreenRandom: [1, 2] as const,  // 非自习桌绿桩差随机范围:绿数 = max(meshGreenMin, npcCount - rand)
+    meshGreenMin: 2,                   // 非自习桌绿桩数下限(每局至少保底绿桩数)
   },
   hud: {
     promptRange: 1.5,       // 近空桩触发左上 GTA prompt 距离(米),spec §4.1

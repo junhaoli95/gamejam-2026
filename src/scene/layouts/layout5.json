@@ -4,15 +4,13 @@
     "h": 24
   },
   "outlets": {
-    "columnCount": [
-      4,
-      6
+    "seed": null,
+    "meshNpcCount": 4,
+    "meshGreenRandom": [
+      1,
+      2
     ],
-    "wallCount": [
-      2,
-      4
-    ],
-    "seed": null
+    "meshGreenMin": 2
   },
   "placements": [
     {
