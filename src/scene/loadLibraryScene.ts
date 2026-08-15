@@ -27,9 +27,9 @@ const LAYOUT_BY_INDEX: LayoutData[] = [layout1, layout2, layout3, layout, layout
 //
 // 电位(充电桩)四类:
 //   1. 自习桌   —— 每桌必带 1 个 table-level 电位(桌面 ±0.45 两绿点)
-//   2. 柱电位   —— 每局随机:从 layout.placements 的 column 里按 outlets.columnCount
-//                  范围洗牌选 N 根(绿方块在柱面,face 朝房间中心)
-//   3. 墙壁插   —— 每局随机:从南/西墙候选点按 outlets.wallCount 洗牌选 M 个(常亮)
+//   2. 柱电位   —— 每局随机:从 layout.placements 的 column 里按 outlets.meshNpcCount+greenTarget
+//                  公式推导池子大小,洗牌选 N 根(绿方块在柱面,face 朝房间中心)
+//   3. 墙壁插   —— 每局随机:从南/西墙候选点与柱同池洗牌选 M 个(常亮)
 //   4. 摸奖桌 ★ —— studyTable-charge:同自习桌渲染 + 绿边视觉,outlet 恒空
 //                  TODO: 摸奖机制 — 走近才能看绿桩,对面 2 空位必绿,1-3 空位几率
 //
@@ -97,11 +97,28 @@ interface LayoutPlacement {
 
 interface LayoutData {
   room: { w: number; h: number };
-  outlets: { columnCount: number[]; wallCount: number[]; seed: number | null; studyTableGreenRate?: number };
+  outlets: {
+    /** 非自习桌桩(NPC 坐猫)数 = 每局红桩数。缺省用 CONFIG.npc.count 兜底。 */
+    meshNpcCount?: number;
+    /** 绿桩差随机范围:绿数 = max(meshGreenMin, meshNpcCount - rand)。缺省用 CONFIG.charging.meshGreenRandom。 */
+    meshGreenRandom?: number[];
+    /** 非自习桌绿桩数下限(每局至少保底绿桩数)。缺省用 CONFIG.charging.meshGreenMin。 */
+    meshGreenMin?: number;
+    seed: number | null;
+    studyTableGreenRate?: number;
+  };
   placements: LayoutPlacement[];
 }
 
 const LAYOUT: LayoutData = LAYOUT_BY_INDEX[LEVEL_INDEX - 1];  // PR #28:标题屏选关(LEVEL_INDEX 1-5;默认 4=Islands=layout.json)
+
+/**
+ * 当前布局的非自习桌 NPC 数(layout.outlets.meshNpcCount 优先,CONFIG.npc.count 兜底)。
+ * main.ts 创建 NpcSystem / randomizeOccupiedOutlets 用,保证红桩数与实体数一致(spec 2026-08-15 §3.3)。
+ */
+export function getLevelNpcCount(): number {
+  return LAYOUT.outlets.meshNpcCount ?? CONFIG.npc.count;
+}
 
 // 房间尺寸唯一真相源 = layout.json(编辑器保存 → HMR 生效;save-server 同步 CONFIG.world)
 const ROOM_W = LAYOUT.room.w;
@@ -197,7 +214,7 @@ function computeFreeSeats(count: number, seed: number): Set<string> {
 
 // ── 每局随机电位(layout.outlets 参数 + seed)──
 // 与编辑器 tools/layout-editor.html 的 drawOutlets 完全同算法/同顺序:
-// columnCount → wallCount → Fisher-Yates 洗牌柱 → 洗牌墙。face 规则同编辑器(朝房间中心)。
+// 池子 = 公式(npCount+greenTarget)推导 → 柱+壁插同池 Fisher-Yates 洗牌。face 规则同编辑器(朝房间中心)。
 function layoutColumnFace(x: number): 1 | -1 {
   return x < 0 ? 1 : -1;
 }
@@ -208,10 +225,6 @@ function wallCandidatesFromLayout(): Array<{ x: number; z: number }> {
   for (let x = -(hw - 2); x <= hw - 2; x += 2) out.push({ x, z: hh - m });
   for (let z = -(hh - 2); z <= hh - 2; z += 2) out.push({ x: -(hw - m), z });
   return out;
-}
-
-function drawCount(rng: () => number, range: number[]): number {
-  return range[0] + Math.floor(rng() * (range[1] - range[0] + 1));
 }
 
 function shuffle<T>(arr: T[], rng: () => number): T[] {
@@ -230,15 +243,44 @@ function gameSeed(): number {
 
 interface OutletSpot { x: number; z: number; face?: 1 | -1; }
 
-function drawOutletSpots(): { columns: OutletSpot[]; walls: OutletSpot[]; seed: number } {
+/** randInt 闭区间整数(与编辑器 simDraw 同款)。 */
+function randInt(rng: () => number, min: number, max: number): number {
+  return min + Math.floor(rng() * (max - min + 1));
+}
+
+/**
+ * 非自习桌桩(柱电位 + 壁插)每局抽取 —— 公式化推导池子大小(spec 2026-08-15 §4.1)。
+ * 绿桩数 = max(meshGreenMin, meshNpcCount - rand),rand ∈ meshGreenRandom;池子大小 = npcCount + greenTarget。
+ * 候选不足时 warn + 保 npc 优先、绿桩下调。
+ */
+function drawOutletSpots(): { columns: OutletSpot[]; walls: OutletSpot[]; seed: number; npcCount: number; greenTarget: number } {
   const seed = gameSeed();
   const rng = mulberry32(seed);
-  const columnCount = drawCount(rng, LAYOUT.outlets.columnCount);
-  const wallCount = drawCount(rng, LAYOUT.outlets.wallCount);
-  const columns = shuffle(layoutColumns(), rng).slice(0, columnCount)
-    .map(c => ({ x: c.x, z: c.z, face: layoutColumnFace(c.x) }));
-  const walls = shuffle(wallCandidatesFromLayout(), rng).slice(0, wallCount);
-  return { columns, walls, seed };
+  const npcCount = LAYOUT.outlets.meshNpcCount ?? CONFIG.npc.count;
+  const randRange = LAYOUT.outlets.meshGreenRandom ?? CONFIG.charging.meshGreenRandom;
+  const rand = randInt(rng, randRange[0], randRange[1]);
+  const greenMin = LAYOUT.outlets.meshGreenMin ?? CONFIG.charging.meshGreenMin;
+  let greenTarget = Math.max(greenMin, npcCount - rand);
+  let need = npcCount + greenTarget;
+
+  const allCols = layoutColumns();
+  const allWalls = wallCandidatesFromLayout();
+  const pool = shuffle<{ x: number; z: number; kind: 'column' | 'wall' }>(
+    [...allCols.map(c => ({ x: c.x, z: c.z, kind: 'column' as const })),
+     ...allWalls.map(w => ({ x: w.x, z: w.z, kind: 'wall' as const }))],
+    rng,
+  );
+
+  if (pool.length < need) {
+    console.warn(`[layout] 布局候选(柱${allCols.length}+墙${allWalls.length}=${pool.length}) < 公式需 ${need}（npc ${npcCount} + 绿 ${greenTarget}）。绿桩下调到 ${Math.max(0, pool.length - npcCount)}。建议布局加柱/壁插候选。`);
+    greenTarget = Math.max(0, pool.length - npcCount);
+    need = Math.min(pool.length, npcCount + greenTarget);
+  }
+
+  const drawn = pool.slice(0, need);
+  const columns = drawn.filter(d => d.kind === 'column').map(c => ({ x: c.x, z: c.z, face: layoutColumnFace(c.x) }));
+  const walls = drawn.filter(d => d.kind === 'wall').map(w => ({ x: w.x, z: w.z }));
+  return { columns, walls, seed, npcCount, greenTarget };
 }
 
 export interface LibraryScene {
@@ -248,7 +290,7 @@ export interface LibraryScene {
   /** 静态+桌区合并碰撞体(玩家与相机共用)。rebuild 时原地刷新,引用稳定。 */
   colliders: THREE.Box3[];
   /** 所有电位位置(柱电位+端板盒+桌电位+壁插),供 SharedState/minimap 消费。 */
-  outlets: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean }>;
+  outlets: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean; kind: 'mesh' | 'table' }>;
   update: (dt: number) => void;
   /** Debug overlay 用:按新 params 拆除并重建桌区(桌椅猫+电位+collider+helper)。 */
   rebuildTableZone: (params: DebugParams) => void;
@@ -661,7 +703,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   let freeSeats: Set<string> = computeFreeSeats(params.freeSeatCount, params.freeSeed);
   let currentParams: DebugParams = params;
   let furIdx = 0;
-  const outletPositions: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean }> = [];
+  const outletPositions: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean; kind: 'mesh' | 'table' }> = [];
 
   function buildOneStudyTable(p: Placement, tableIdx: number): void {
     const isCharge = p.kind === 'studyTable-charge';
@@ -727,7 +769,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       const sq = new THREE.Mesh(studyOutletGeo, outletMatEmpty);
       sq.position.set(p.x + ox * cosR, tableH + 0.011, p.z + ox * sinR);
       tableZone.add(sq);
-      outletPositions.push({ x: p.x + ox * cosR, z: p.z + ox * sinR, occupied: false, occupiable: true });
+      outletPositions.push({ x: p.x + ox * cosR, z: p.z + ox * sinR, occupied: false, occupiable: true, kind: 'table' });
       outletMeshGroups.push([sq]);
       const outletIdx = outletPositions.length - 1;
       studyOutletIdxs.push(outletIdx);
@@ -810,13 +852,13 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     chargeOutletIndexes.clear();
     let ciMesh = 0;
     for (const c of outletDraw.columns) {
-      outletPositions.push({ x: c.x + c.face! * (MODEL_DIMS.column.w / 2 + 0.01), z: c.z, occupied: false, occupiable: true });
+      outletPositions.push({ x: c.x + c.face! * (MODEL_DIMS.column.w / 2 + 0.01), z: c.z, occupied: false, occupiable: true, kind: 'mesh' });
       outletMeshGroups.push([columnOutletMeshes[ciMesh++]]);
       tableOutletSeatKeys.push(null);
     }
     let wiMesh = 0;
     for (const w of outletDraw.walls) {
-      outletPositions.push({ x: w.x, z: w.z, occupied: false, occupiable: true });
+      outletPositions.push({ x: w.x, z: w.z, occupied: false, occupiable: true, kind: 'mesh' });
       // 壁插现在也参与 NPC 占用(mesh-backed),与柱/桌桩同套 setOutletOccupied 切色
       outletMeshGroups.push([wallSocketMeshes[wiMesh++]]);
       tableOutletSeatKeys.push(null);
@@ -882,8 +924,11 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
    * (4 椅都坐猫 = 红,1-3 空 = 绿,不参与随机);再从非桌 mesh-backed 桩里用 mulberry32 +
    * Fisher-Yates 挑 count 个标红;清旧 NPC 猫,新坐姿猫放 (o.x, 0.45, o.z + 0.6)。
    * 壁插自 NPC-也-抢 改为也参与随机占位(已 mesh-backed)。
+   * 池子大小由 drawOutletSpots 公式锁(npcCount + greenTarget);count 缺省用 layout 的
+   * meshNpcCount ?? CONFIG.npc.count,与 NpcSystem 实体数一致(spec 2026-08-15 §4.2)。
    */
-  function randomizeOccupiedOutlets(count: number = CONFIG.npc.count, seed: number = NPC_SEED): void {
+  function randomizeOccupiedOutlets(count?: number, seed: number = NPC_SEED): void {
+    const targetCount = count ?? LAYOUT.outlets.meshNpcCount ?? CONFIG.npc.count;
     // 重置 occupied + 回绿 + 清旧 NPC 猫
     for (let i = 0; i < outletPositions.length; i++) {
       outletPositions[i].occupied = false;
@@ -947,13 +992,13 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     }
     if (meshBacked.length === 0) return;
 
-    // Fisher-Yates 洗牌取前 count 个 — 同 (count, seed) 永远产同一份分布
+    // Fisher-Yates 洗牌取前 targetCount 个 — 同 (count, seed) 永远产同一份分布
     const rng = mulberry32(seed);
     for (let i = meshBacked.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
       [meshBacked[i], meshBacked[j]] = [meshBacked[j], meshBacked[i]];
     }
-    const chosenN = Math.min(count, meshBacked.length);
+    const chosenN = Math.min(targetCount, meshBacked.length);
     for (let k = 0; k < chosenN; k++) {
       const idx = meshBacked[k];
       outletPositions[idx].occupied = true;

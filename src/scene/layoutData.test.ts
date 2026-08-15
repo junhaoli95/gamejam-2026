@@ -60,10 +60,16 @@ describe('5 个布局快照(标题屏可选,PR #28)', () => {
         expect(count('studyTable-charge')).toBeLessThanOrEqual(2);
       });
 
-      it('outlets 随机参数合法:min<=max、范围合理、seed 为 null 或数字', () => {
-        expect(data.outlets.columnCount[0]).toBeLessThanOrEqual(data.outlets.columnCount[1]);
-        expect(data.outlets.wallCount[0]).toBeLessThanOrEqual(data.outlets.wallCount[1]);
-        expect(data.outlets.columnCount[1]).toBeLessThanOrEqual(12);
+      it('outlets 新 schema:meshNpcCount/meshGreenRandom/meshGreenMin 合法,旧字段已废弃', () => {
+        expect(Number.isInteger(data.outlets.meshNpcCount)).toBe(true);
+        expect(data.outlets.meshNpcCount).toBeGreaterThanOrEqual(0);
+        expect(data.outlets.meshGreenRandom.length).toBe(2);
+        expect(data.outlets.meshGreenRandom[0]).toBeGreaterThanOrEqual(0);
+        expect(data.outlets.meshGreenRandom[0]).toBeLessThanOrEqual(data.outlets.meshGreenRandom[1]);
+        if (data.outlets.meshGreenMin !== undefined) {
+          expect(Number.isInteger(data.outlets.meshGreenMin)).toBe(true);
+          expect(data.outlets.meshGreenMin).toBeGreaterThanOrEqual(0);
+        }
         expect(data.outlets.seed === null || typeof data.outlets.seed === 'number').toBe(true);
       });
 
