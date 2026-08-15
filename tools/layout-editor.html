@@ -152,10 +152,11 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
 .el.socket .lbl { color: #6fae74; font-size: 9px; }
 .el.panel .body { background: #b8bcc0; box-shadow: inset 0 0 0 1px #7f848b; }
 .el.panel .lbl { color: #3d434b; }
-.sim-dot, .sim-cand {
+.sim-dot, .sim-cand, .sim-dot-red {
   position: absolute; border-radius: 50%; pointer-events: none; z-index: 2;
 }
 .sim-dot { width: 5px; height: 5px; background: #2dff7a; box-shadow: 0 0 3px #2dff7a; }
+.sim-dot-red { width: 5px; height: 5px; background: #ff4d4d; box-shadow: 0 0 3px #ff4d4d; }
 .sim-cand { width: 3px; height: 3px; background: #56636e; }
 .sim-green { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 2px solid #2dff7a; border-radius: 50%; box-shadow: 0 0 6px #2dff7a; pointer-events: none; z-index: 3; }
 
@@ -213,15 +214,15 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
         <label for="simFix" style="width:auto">固定</label><input id="simFix" type="checkbox" aria-label="固定 seed 导出">
       </div>
       <div class="row">
-        <label for="simColMin">柱</label><input id="simColMin" type="number" min="0" max="12" aria-label="柱电位最少"><label for="simColMax" style="width:auto">~</label><input id="simColMax" type="number" min="0" max="12" aria-label="柱电位最多"><span class="unit">根</span>
+        <label for="simMeshNpc">NPC 数</label><input id="simMeshNpc" type="number" min="0" max="12" aria-label="非自习桌 NPC 数">
       </div>
       <div class="row">
-        <label for="simWallMin">墙</label><input id="simWallMin" type="number" min="0" max="26" aria-label="墙壁插最少"><label for="simWallMax" style="width:auto">~</label><input id="simWallMax" type="number" min="0" max="26" aria-label="墙壁插最多"><span class="unit">个</span>
+        <label for="simGreenMin">绿差</label><input id="simGreenMin" type="number" min="0" max="12" aria-label="绿桩差随机最少"><label for="simGreenMax" style="width:auto">~</label><input id="simGreenMax" type="number" min="0" max="12" aria-label="绿桩差随机最多"><span class="unit">· 绿下限 <input id="simGreenFloor" type="number" min="0" max="12" aria-label="绿桩数下限" style="width:42px"></span>
       </div>
       <div class="row">
         <label for="simGreenRate">自习桌绿桩率</label><input id="simGreenRate" type="number" min="0" max="1" step="0.01" aria-label="自习桌绿桩占比"><span class="unit">· 绿桩 <b id="simGreenN">0</b> 个</span>
       </div>
-      <div id="simInfo">seed 12345 · 柱 0/0 · 墙 0/0 · 总桩 0</div>
+      <div id="simInfo">seed 12345 · npc 0 · 绿 0 · 池子需求 0</div>
     </div>
 
     <div id="histBox" class="box">
@@ -359,7 +360,7 @@ let drag = null;
 let seq = 0;
 let selectedEl = null;
 
-let sim = { seed: 12345, columnMin: 4, columnMax: 6, wallMin: 2, wallMax: 4, fixSeed: false, greenRate: 0.05 };
+let sim = { seed: 12345, meshNpc: 3, greenMin: 1, greenMax: 2, greenMinFloor: 2, fixSeed: false, greenRate: 0.05 };
 let defaultRot = 0;  // 默认朝向:0=横,1=竖(对所有可旋转元素生效)
 
 let historyStack = [];
@@ -903,30 +904,48 @@ function columnFace(x) {
   return x < 0 ? 1 : -1;
 }
 
-function drawOutlets(seed, ranges, columns, candidates) {
+/** 非自习桌桩每局抽取(与游戏 drawOutletSpots 同算法:公式推导池子大小 + 同池洗牌)。 */
+function drawOutlets(seed, p) {
   const rng = mulberry32(seed);
-  const columnCount = drawCount(rng, ranges.columnCount);
-  const wallCount = drawCount(rng, ranges.wallCount);
-  const cols = shuffle(columns.slice(), rng).slice(0, columnCount);
-  const walls = shuffle(candidates.slice(), rng).slice(0, wallCount);
-  return { columnCount, wallCount, columns: cols, walls };
+  const rand = drawCount(rng, [p.greenMin, p.greenMax]);
+  const greenTarget = Math.max(p.greenMinFloor, p.meshNpc - rand);
+  let need = p.meshNpc + greenTarget;
+  const cols = elements.filter(e => e.kind === 'C');
+  const cands = wallCandidates(ROOM_W, ROOM_H);
+  const pool = shuffle([
+    ...cols.map(c => ({ x: c.x, z: c.z, kind: 'column' })),
+    ...cands.map(w => ({ x: w.x, z: w.z, kind: 'wall' })),
+  ], rng);
+  const warn = pool.length < need;
+  if (warn) {
+    // 候选不足:保 npc 优先,绿桩下调(spec §4.1 同款)
+    need = pool.length;
+  }
+  const drawn = pool.slice(0, need);
+  return {
+    npc: p.meshNpc,
+    green: Math.max(0, drawn.length - p.meshNpc),
+    need,
+    warn,
+    poolSize: pool.length,
+    drawn,
+    columns: drawn.filter(d => d.kind === 'column').map(c => ({ x: c.x, z: c.z })),
+    walls: drawn.filter(d => d.kind === 'wall').map(w => ({ x: w.x, z: w.z })),
+  };
 }
 
 function outletTotal() {
-  const cols = elements.filter(e => e.kind === 'C').length;
   const tables = elements.filter(e => e.kind === 'T' || e.kind === '★').length;
   const d = simDraw();
-  return tables + d.columnCount + d.wallCount;
+  return tables + d.need;
 }
 
 function simDraw() {
-  const columns = elements.filter(e => e.kind === 'C');
-  const cands = wallCandidates(ROOM_W, ROOM_H);
-  return drawOutlets(sim.seed, { columnCount: [sim.columnMin, sim.columnMax], wallCount: [sim.wallMin, sim.wallMax] }, columns, cands);
+  return drawOutlets(sim.seed, { meshNpc: sim.meshNpc, greenMin: sim.greenMin, greenMax: sim.greenMax, greenMinFloor: sim.greenMinFloor });
 }
 
 function renderSim() {
-  canvas.querySelectorAll('.sim-dot, .sim-cand, .sim-green').forEach(d => d.remove());
+  canvas.querySelectorAll('.sim-dot, .sim-cand, .sim-green, .sim-dot-red').forEach(d => d.remove());
   const draw = simDraw();
   const hw = halfW(), hh = halfH();
   const dotAt = (x, z, cls) => {
@@ -937,8 +956,12 @@ function renderSim() {
     canvas.appendChild(d);
   };
   for (const cand of wallCandidates(ROOM_W, ROOM_H)) dotAt(cand.x, cand.z, 'sim-cand');
-  for (const w of draw.walls) dotAt(w.x, w.z, 'sim-dot');
-  for (const c of draw.columns) dotAt(c.x + columnFace(c.x) * 0.46, c.z, 'sim-dot');
+  // 前 npc 个红(坐猫占位),剩 greenTarget 个绿(玩家可充)
+  for (let k = 0; k < draw.drawn.length; k++) {
+    const p = draw.drawn[k];
+    if (p.kind === 'column') dotAt(p.x + columnFace(p.x) * 0.46, p.z, k < draw.npc ? 'sim-dot-red' : 'sim-green');
+    else dotAt(p.x, p.z, k < draw.npc ? 'sim-dot-red' : 'sim-green');
+  }
 
   const studyEls = elements.filter(e => e.kind === 'T');
   const studyN = studyEls.length;
@@ -956,8 +979,8 @@ function renderSim() {
 
   const tables = elements.filter(e => e.kind === 'T' || e.kind === '★').length;
   document.getElementById('simInfo').textContent =
-    'seed ' + sim.seed + ' · 柱 ' + draw.columnCount + '/' + elements.filter(e => e.kind === 'C').length +
-    ' · 墙 ' + draw.wallCount + ' · 总桩 ' + (tables + draw.columnCount + draw.wallCount) + '(含桌 ' + tables + ')';
+    'seed ' + sim.seed + ' · npc ' + draw.npc + ' · 绿 ' + draw.green + ' · 池子需求 ' + draw.need +
+    (draw.warn ? ' · ⚠候选不足(剩 ' + draw.poolSize + ')' : '') + ' · 总桩 ' + (tables + draw.need) + '(含桌 ' + tables + ')';
   document.getElementById('simGreenN').textContent = greenN;
 }
 
@@ -1110,29 +1133,29 @@ document.getElementById('clearRedoBtn').addEventListener('click', () => {
 
 const simSeedInput = document.getElementById('simSeed');
 const simFixInput = document.getElementById('simFix');
-const simColMin = document.getElementById('simColMin');
-const simColMax = document.getElementById('simColMax');
-const simWallMin = document.getElementById('simWallMin');
-const simWallMax = document.getElementById('simWallMax');
+const simMeshNpc = document.getElementById('simMeshNpc');
+const simGreenMin = document.getElementById('simGreenMin');
+const simGreenMax = document.getElementById('simGreenMax');
+const simGreenFloor = document.getElementById('simGreenFloor');
 const simGreenRate = document.getElementById('simGreenRate');
 
 function syncSimInputs() {
   simSeedInput.value = sim.seed;
   simFixInput.checked = sim.fixSeed;
-  simColMin.value = sim.columnMin;
-  simColMax.value = sim.columnMax;
-  simWallMin.value = sim.wallMin;
-  simWallMax.value = sim.wallMax;
+  simMeshNpc.value = sim.meshNpc;
+  simGreenMin.value = sim.greenMin;
+  simGreenMax.value = sim.greenMax;
+  simGreenFloor.value = sim.greenMinFloor;
   simGreenRate.value = sim.greenRate;
 }
 
 function simChanged() {
   sim.seed = parseInt(simSeedInput.value, 10) || 0;
   sim.fixSeed = simFixInput.checked;
-  sim.columnMin = Math.max(0, Math.min(12, parseInt(simColMin.value, 10) || 0));
-  sim.columnMax = Math.max(sim.columnMin, Math.min(12, parseInt(simColMax.value, 10) || 0));
-  sim.wallMin = Math.max(0, Math.min(26, parseInt(simWallMin.value, 10) || 0));
-  sim.wallMax = Math.max(sim.wallMin, Math.min(26, parseInt(simWallMax.value, 10) || 0));
+  sim.meshNpc = Math.max(0, Math.min(12, parseInt(simMeshNpc.value, 10) || 0));
+  sim.greenMin = Math.max(0, Math.min(12, parseInt(simGreenMin.value, 10) || 0));
+  sim.greenMax = Math.max(sim.greenMin, Math.min(12, parseInt(simGreenMax.value, 10) || 0));
+  sim.greenMinFloor = Math.max(0, Math.min(12, parseInt(simGreenFloor.value, 10) || 0));
   sim.greenRate = Math.max(0, Math.min(1, parseFloat(simGreenRate.value) || 0));
   syncSimInputs();
   refresh();
@@ -1141,10 +1164,10 @@ function simChanged() {
 
 simSeedInput.addEventListener('change', simChanged);
 simFixInput.addEventListener('change', simChanged);
-simColMin.addEventListener('change', simChanged);
-simColMax.addEventListener('change', simChanged);
-simWallMin.addEventListener('change', simChanged);
-simWallMax.addEventListener('change', simChanged);
+simMeshNpc.addEventListener('change', simChanged);
+simGreenMin.addEventListener('change', simChanged);
+simGreenMax.addEventListener('change', simChanged);
+simGreenFloor.addEventListener('change', simChanged);
 simGreenRate.addEventListener('change', simChanged);
 document.getElementById('simDice').addEventListener('click', () => {
   simSeedInput.value = Math.floor(Math.random() * 0x7fffffff);
@@ -1203,8 +1226,9 @@ function buildJson() {
   return {
     room: { w: ROOM_W, h: ROOM_H },
     outlets: {
-      columnCount: [sim.columnMin, sim.columnMax],
-      wallCount: [sim.wallMin, sim.wallMax],
+      meshNpcCount: sim.meshNpc,
+      meshGreenRandom: [sim.greenMin, sim.greenMax],
+      meshGreenMin: sim.greenMinFloor,
       seed: sim.fixSeed ? sim.seed : null,
       studyTableGreenRate: sim.greenRate,
     },
@@ -1225,15 +1249,21 @@ const KIND_BY_NAME = {
 
 function stateFromJson(j) {
   const o = j.outlets || {};
-  const cc = Array.isArray(o.columnCount) ? o.columnCount : [4, 6];
-  const wc = Array.isArray(o.wallCount) ? o.wallCount : [2, 4];
+  if (o.columnCount || o.wallCount) {
+    console.warn('legacy schema, please reconfigure');
+  }
+  const meshNpc = typeof o.meshNpcCount === 'number' ? o.meshNpcCount : 3;
+  const gr = Array.isArray(o.meshGreenRandom) ? o.meshGreenRandom : [1, 2];
+  const gFloor = typeof o.meshGreenMin === 'number' ? o.meshGreenMin : 2;
   return {
     roomW: j.room.w,
     roomH: j.room.h,
     sim: {
       seed: typeof o.seed === 'number' ? o.seed : sim.seed,
-      columnMin: cc[0], columnMax: cc[1],
-      wallMin: wc[0], wallMax: wc[1],
+      meshNpc,
+      greenMin: gr[0],
+      greenMax: Math.max(gr[0], gr[1]),
+      greenMinFloor: gFloor,
       fixSeed: typeof o.seed === 'number',
       greenRate: typeof o.studyTableGreenRate === 'number' ? o.studyTableGreenRate : sim.greenRate,
     },

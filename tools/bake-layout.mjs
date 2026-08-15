@@ -57,8 +57,9 @@ for (const p of placements) {
 const layout = {
   room: { w: 32, h: 24 },
   outlets: {
-    columnCount: [4, 6],
-    wallCount: [2, 4],
+    meshNpcCount: 3,
+    meshGreenRandom: [1, 2],
+    meshGreenMin: 2,
     seed: null,
   },
   placements,
