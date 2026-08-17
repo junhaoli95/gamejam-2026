@@ -185,6 +185,8 @@ const npcOpts: Parameters<typeof createNpcController>[0] = {
   setOutletOccupied: setOutletOccupied,
   // PR #17 A:壁插(occupiable=false)常亮可充,NPC 不占
   isOutletOccupiable: (i) => outlets[i].occupiable !== false,
+  // PR #27 fix:保留最后 1 根非自习桌绿桩时,让 NPC controller 区分 mesh/table reservation。
+  isOutletMesh: (i) => outlets[i].kind === 'mesh',
   // PR #17 B:A* 寻路网格(cellSize 0.4;inflate=NPC 半径 0.38 → path 保持 ≥0.38m 离墙,
   // 避免 NPC 圆盘边缘擦 collider 被 resolveCollision 推出卡死)
   grid: toGrid(colliders, CONFIG.world.w, CONFIG.world.d, CONFIG.world.cellSize, 0.38),
