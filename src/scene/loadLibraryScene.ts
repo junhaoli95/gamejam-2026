@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadGlbNormalized } from '../../snippets/loadGlb';
 import { CONFIG } from '../game/config';
+import { createProceduralBookshelf } from './proceduralLibraryProps';
 import layout from './layout.json';
 // PR #28 标题屏选关 — 4 个布局快照(Sam PR #24 验过的 5 个布局,Islands = layout.json):
 import layout1 from './layouts/layout1.json';  // Open Lobby(7桌)
@@ -383,23 +384,9 @@ function createPlaceholderCat(): THREE.Group {
   return cat;
 }
 
-/** 实拍书架两色:白钢架身 + 浅木端板(端板略宽出架身)。 */
+/** 程序化书架视觉;保留静态占位接口,供 GLB 异步替换。 */
 function buildShelfPlaceholder(dim: { w: number; h: number; d: number }): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(dim.w, dim.h, dim.d),
-    new THREE.MeshStandardMaterial({ color: PLACEHOLDER_COLOR.bookshelf, roughness: 0.55, metalness: 0.1 }),
-  );
-  body.position.y = dim.h / 2;
-  g.add(body);
-  const capMat = new THREE.MeshStandardMaterial({ color: 0xb08c5e, roughness: 0.6, metalness: 0 });
-  for (const side of [-1, 1]) {
-    // cap 中心 ±(w/2-0.04):外表面 ±1.51 凸出 body 端面(±1.5)0.01 —— 消除共面 z-fighting(端部褐/灰白闪烁)
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.1, dim.h, dim.d + 0.06), capMat);
-    cap.position.set(side * (dim.w / 2 - 0.04), dim.h / 2, 0);
-    g.add(cap);
-  }
-  return g;
+  return createProceduralBookshelf(dim, 17);
 }
 
 function disposeObject(root: THREE.Object3D): void {
