@@ -194,6 +194,8 @@ const npcOpts: Parameters<typeof createNpcController>[0] = {
   cfg: CONFIG.npc,
   // PR #16 fix:colliders 转轻量 AABB 给 NPC 防穿墙(与 player 同源)
   colliders: colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z })),
+  // 墙不在 colliders 里(玩家靠 controller bounds clamp),NPC 需另加场地边界 clamp 防穿墙
+  bounds: { w: CONFIG.world.w, d: CONFIG.world.d },
   freeMeshGreenCount: Infinity,  // 门控默认关闭;每帧在 game loop 更新
 };
 const npcController = createNpcController(npcOpts);
