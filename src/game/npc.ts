@@ -89,6 +89,13 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
   const cfg = opts.cfg;
   let rng = mulberry32(1);
 
+  /**
+   * 目标预定表:occupied 只表示已经坐下,不表示正在赶来的 NPC。
+   * NPC 选桩与真正到达之间跨越多帧,必须单独预定,否则同一帧多个 idle
+   * 实体会同时选中同一根绿桩。
+   */
+  const reservedOutletBy = new Map<number, number>(); // outlet index -> entity meshIndex
+
   /** NPC 碰撞半径:比玩家 0.32 略大 + 视觉 margin(坐姿猫身体半宽 0.26,0.38 保证不贴柱) */
   const NPC_RADIUS = 0.38;
 
@@ -119,16 +126,19 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     }
   }
 
-  /** 遍历所有 outlets,找 isOutletOccupied(i)===false 且可占(非壁插)的最近一个;-1 = 无可选。exclude:跳过某桩(不可达重选用)。
+  /** 遍历所有 outlets,找未占用、未被其他 NPC 预定且可占(非壁插)的最近一个;-1 = 无可选。
+   * exclude:跳过某桩(不可达重选用); reserver:允许当前实体继续看到自己的预定。
    *  保底 N+1:玩家有桩可充由 main.ts 启动时校验 NPC 数 + 初始预占 ≤ 总桩 - 1 保证 ——
    *  不在此函数里检查 freeCount(那样会让单元测试只用 1~3 桩时无法模拟普通占用流程)。
    */
-  function pickNearestFreeOutlet(fromX: number, fromZ: number, exclude = -1): number {
+  function pickNearestFreeOutlet(fromX: number, fromZ: number, exclude = -1, reserver = -1): number {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < opts.getOutletCount(); i++) {
       if (i === exclude) continue;
       if (opts.isOutletOccupied(i)) continue;
+      const reservedBy = reservedOutletBy.get(i);
+      if (reservedBy !== undefined && reservedBy !== reserver) continue;
       // PR #17 A:壁插(occupiable=false)常亮可充,不让 NPC 占
       if (opts.isOutletOccupiable && !opts.isOutletOccupiable(i)) continue;
       const p = opts.getOutletPos(i);
@@ -139,6 +149,18 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
       }
     }
     return best;
+  }
+
+  /** 清除实体当前目标及其预定,用于目标被抢/重置/重新选桩。 */
+  function releaseOutletReservation(e: NpcEntity): void {
+    if (e.targetOutletIndex >= 0 && reservedOutletBy.get(e.targetOutletIndex) === e.meshIndex) {
+      reservedOutletBy.delete(e.targetOutletIndex);
+    }
+    e.targetOutletIndex = -1;
+    e.path = [];
+    e.pathX = [];
+    e.pathZ = [];
+    e.pathIdx = 0;
   }
 
   /** 桩/起点可能落在 blocked cell(柱面桩贴柱、桌中心桩)→ 找最近 free cell 作寻路端点。 */
@@ -177,14 +199,20 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
 
   /** 选一个可达空桩作为目标;全不可达/全占 → -1。 */
   function pickReachableOutlet(e: NpcEntity, exclude = -1): number {
-    let t = pickNearestFreeOutlet(e.x, e.z, exclude);
+    // 重新选桩前先释放旧目标,避免旧 reservation 泄漏。
+    releaseOutletReservation(e);
+    let t = pickNearestFreeOutlet(e.x, e.z, exclude, e.meshIndex);
     let excluded = exclude;
     while (t >= 0) {
       e.targetOutletIndex = t;
-      if (computePath(e)) return t;
+      if (computePath(e)) {
+        reservedOutletBy.set(t, e.meshIndex);
+        return t;
+      }
       excluded = t;
-      t = pickNearestFreeOutlet(e.x, e.z, excluded);
+      t = pickNearestFreeOutlet(e.x, e.z, excluded, e.meshIndex);
     }
+    releaseOutletReservation(e);
     return -1;
   }
 
@@ -300,7 +328,6 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
           if (t >= 0) {
             continue;
           } else {
-            e.targetOutletIndex = -1;
             e.state = 'idle';
             e.idleTimer = newIdleTimer();
           }
@@ -336,6 +363,7 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
           if (e.pathIdx >= e.path.length) {
             resolveCollision(e);
             e.state = 'occupying';
+            reservedOutletBy.delete(e.targetOutletIndex);
             opts.setOutletOccupied(e.targetOutletIndex, true);
           } else {
             // 未到:若 path 已走完但桩还远(最后一个 cell 中心不可达)→ 沿路径方向直线逼近
@@ -358,6 +386,7 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
             // 若推出后仍在柱内(多柱重叠/极端),沿来路反向退 0.5m 兜底。
             resolveCollision(e);
             e.state = 'occupying';
+            reservedOutletBy.delete(e.targetOutletIndex);
             opts.setOutletOccupied(e.targetOutletIndex, true);
           } else {
             const step = Math.min(cfg.walkSpeed * dt, dist);  // 防超调过头
@@ -376,13 +405,10 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
   /** 重置全部实体为 idle(位置不动,由 main.ts 重新对齐 npcMeshes);seed 化计时器可复现。 */
   function reset(seed?: number): void {
     rng = mulberry32((seed ?? Date.now()) | 0);
+    reservedOutletBy.clear();
     for (const e of entities) {
       e.state = 'idle';
-      e.targetOutletIndex = -1;
-      e.path = [];
-      e.pathX = [];
-      e.pathZ = [];
-      e.pathIdx = 0;
+      releaseOutletReservation(e);
       e.idleTimer = newIdleTimer();
     }
   }
