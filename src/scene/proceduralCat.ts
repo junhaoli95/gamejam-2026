@@ -76,6 +76,8 @@ interface CatRig {
 
 const rigs = new WeakMap<THREE.Group, CatRig>();
 const materialCache = new Map<number, THREE.MeshStandardMaterial>();
+let eyeTexture: THREE.DataTexture | null = null;
+let eyeMaterial: THREE.MeshBasicMaterial | null = null;
 
 function materialFor(color: number): THREE.MeshStandardMaterial {
   let material = materialCache.get(color);
@@ -84,6 +86,43 @@ function materialFor(color: number): THREE.MeshStandardMaterial {
     materialCache.set(color, material);
   }
   return material;
+}
+
+/** 程序化猫眼贴图:透明底 + 琥珀虹膜 + 黑色竖瞳 + 高光。DataTexture 纯像素生成,零 DOM 依赖,全局单例。 */
+function createEyeTexture(): THREE.DataTexture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x - size / 2;
+      const dy = y - size / 2;
+      const i = (y * size + x) * 4;
+      let r = 0, g = 0, b = 0, a = 0;
+      if (dx * dx + dy * dy < 24 * 24) {
+        r = 183; g = 131; b = 50; a = 255;                       // 琥珀虹膜
+        if ((dx / 12) ** 2 + (dy / 22) ** 2 < 1) {
+          r = 42; g = 33; b = 29;                                 // 黑色竖瞳
+        }
+        if ((dx - 14) ** 2 + (dy - 14) ** 2 < 36) {
+          r = 255; g = 255; b = 255;                              // 高光
+        }
+      }
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+      data[i + 3] = a;
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function getEyeMaterial(): THREE.MeshBasicMaterial {
+  if (eyeMaterial) return eyeMaterial;
+  if (!eyeTexture) eyeTexture = createEyeTexture();
+  eyeMaterial = new THREE.MeshBasicMaterial({ map: eyeTexture, transparent: true, depthWrite: false });
+  return eyeMaterial;
 }
 
 function addMesh<T extends THREE.Object3D>(
@@ -111,24 +150,25 @@ function createCatParts(palette: CatPalette, seated: boolean): { cat: THREE.Grou
   const furLight = materialFor(palette.furLight);
   const chest = materialFor(palette.chest);
   const stripe = materialFor(palette.stripe);
-  const eye = materialFor(palette.eye);
 
-  // ── Q版身体:大头小身 ──
+  // ── Q版身体:Minecraft 风方块身 ──
   const bodyY = seated ? 0.42 : 0.52;
   const body = addMesh(
     cat,
     'body',
-    new THREE.Mesh(new THREE.CapsuleGeometry(seated ? 0.26 : 0.3, seated ? 0.28 : 0.4, 3, 8), fur),
+    new THREE.Mesh(
+      new THREE.BoxGeometry(seated ? 0.58 : 0.62, seated ? 0.5 : 0.62, seated ? 0.5 : 0.48),
+      fur,
+    ),
     [0, bodyY, seated ? 0.04 : 0],
   );
-  body.scale.set(seated ? 1.05 : 0.98, seated ? 0.9 : 1.05, seated ? 0.95 : 1.1);
 
   if (!seated) {
     addMesh(
       body,
       'bodyStripe0',
       new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.035), stripe),
-      [0, 0.28, 0.3],
+      [0, 0.28, 0.22],
     );
   }
 
@@ -157,19 +197,31 @@ function createCatParts(palette: CatPalette, seated: boolean): { cat: THREE.Grou
     if (side === -1) leftEar = ear;
     else rightEar = ear;
 
-    addMesh(
+    // 眼睛:贴图平面(CanvasTexture 画猫眼),贴头部表面朝外
+    const eye = addMesh(
       head,
       side === -1 ? 'leftEye' : 'rightEye',
-      new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 4), eye),
-      [side * 0.13, 0.05, -0.33],
+      new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.17), getEyeMaterial()),
+      [side * 0.13, 0.04, -0.3],
     );
+    eye.rotation.y = -side * 0.35;
   }
 
-  // ── 双腿(站立)或坐姿双腿前伸 ──
-  const legZ = seated ? -0.05 : 0;
-  const legY = seated ? 0.16 : 0.2;
-  const leftLeg = addMesh(cat, 'leftLeg', new THREE.Mesh(new THREE.CapsuleGeometry(0.11, seated ? 0.2 : 0.42, 2, 6), fur), [-0.13, legY, legZ]);
-  const rightLeg = addMesh(cat, 'rightLeg', new THREE.Mesh(new THREE.CapsuleGeometry(0.11, seated ? 0.2 : 0.42, 2, 6), fur), [0.13, legY, legZ]);
+  // ── 双腿(方块;站立)或坐姿双腿前伸 ──
+  const legZ = seated ? 0.02 : 0;
+  const legY = seated ? 0.16 : 0.22;
+  const leftLeg = addMesh(
+    cat,
+    'leftLeg',
+    new THREE.Mesh(new THREE.BoxGeometry(0.22, seated ? 0.2 : 0.44, 0.22), fur),
+    [-0.13, legY, legZ],
+  );
+  const rightLeg = addMesh(
+    cat,
+    'rightLeg',
+    new THREE.Mesh(new THREE.BoxGeometry(0.22, seated ? 0.2 : 0.44, 0.22), fur),
+    [0.13, legY, legZ],
+  );
 
   // 脚掌(奶油色;坐姿时被身体挡住,省略省 mesh)
   if (!seated) {
@@ -177,11 +229,11 @@ function createCatParts(palette: CatPalette, seated: boolean): { cat: THREE.Grou
     addMesh(cat, 'rightFoot', new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), chest), [0.13, 0.06, 0.06]).scale.set(1, 0.5, 1.4);
   }
 
-  // ── 两只短手臂(站立时自然下垂,坐姿时放腿前) ──
+  // ── 两只短手臂(方块;站立时自然下垂,坐姿时放腿前) ──
   const armY = seated ? 0.34 : 0.42;
   const armZ = seated ? 0.05 : 0;
-  const leftArm = addMesh(cat, 'leftArm', new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.32, 2, 6), furLight), [-0.27, armY, armZ]);
-  const rightArm = addMesh(cat, 'rightArm', new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.32, 2, 6), furLight), [0.27, armY, armZ]);
+  const leftArm = addMesh(cat, 'leftArm', new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.34, 0.16), furLight), [-0.27, armY, armZ]);
+  const rightArm = addMesh(cat, 'rightArm', new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.34, 0.16), furLight), [0.27, armY, armZ]);
 
   addMesh(
     body,

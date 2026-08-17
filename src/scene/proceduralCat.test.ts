@@ -54,6 +54,24 @@ describe('procedural cat geometry', () => {
     expect(meshCount).toBeLessThanOrEqual(16);
   });
 
+  it('uses box geometry for the body and limbs instead of capsules', () => {
+    const cat = createStandingCat(BROWN_TABBY_PALETTE);
+
+    expect((cat.getObjectByName('body') as THREE.Mesh).geometry.type).toBe('BoxGeometry');
+    expect((cat.getObjectByName('leftLeg') as THREE.Mesh).geometry.type).toBe('BoxGeometry');
+    expect((cat.getObjectByName('leftArm') as THREE.Mesh).geometry.type).toBe('BoxGeometry');
+  });
+
+  it('renders eyes with a texture material instead of sphere meshes', () => {
+    const cat = createStandingCat(BROWN_TABBY_PALETTE);
+    const leftEye = cat.getObjectByName('leftEye') as THREE.Mesh;
+    const material = leftEye.material as THREE.MeshBasicMaterial;
+
+    expect(leftEye.geometry.type).toBe('PlaneGeometry');
+    expect(material).toBeInstanceOf(THREE.MeshBasicMaterial);
+    expect(material.map).toBeInstanceOf(THREE.Texture);
+  });
+
   it('keeps seated cats as a separate pose', () => {
     const cat = createSeatedCat(BROWN_TABBY_PALETTE, 0);
     let meshCount = 0;
