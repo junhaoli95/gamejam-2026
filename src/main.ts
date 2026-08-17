@@ -31,7 +31,7 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // --- Scene ---
-const { scene, player, colliders, outlets, update, resetPlayerAnimation, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
+const { scene, player, colliders, outlets, update, resetPlayerAnimation, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain, rebuildTableZone } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // PR #28:刷新/回访 → 总是显标题屏(除非刚选过关的 reload 用 sessionStorage 一次性跳过);
@@ -131,29 +131,38 @@ function tryStartBgmOnce(): void {
 window.addEventListener('keydown', tryStartBgmOnce);
 window.addEventListener('click', tryStartBgmOnce);
 
+// PR #36:当前关卡原地重开(不回标题屏)—— phoneHud Retry 按钮 + missionToast R 键共用
+function restartCurrentLevel(): void {
+  gameWon = false;
+  gameOver = false;
+  lowLatch = false; // PR #16:低电警报 latch 复位
+  bgmStarted = true;
+  audio.startBGM(); // PR #16:重开一局,恢复 BGM(若已停)
+  playerStats.reset();
+  player.position.set(0, 0, 8.5);
+  resetPlayerAnimation();
+  // PR #13 #5:新 seed,每局 NPC 占位分布不同(QTE 方案已砍,无 state 需重置)
+  // spec 2026-08-15:红桩数 = 布局 meshNpcCount(缺省 CONFIG.npc.count),与 NpcSystem 实体数一致
+  const restartSeed = Date.now() % 100000;
+  // 重建桌区(freeSeats 用新 seed → 每局空位分布不同 → 绿桩候选池变化)
+  rebuildTableZone({ freeSeatCount: DEFAULT_DEBUG_PARAMS.freeSeatCount, freeSeed: restartSeed });
+  randomizeOccupiedOutlets(getLevelNpcCount(), restartSeed);
+  // PR #16 B:重开新局,NPC 状态重置 + 位置对齐新摆的坐姿猫
+  npcController.reset(restartSeed);
+  syncNpcPositionsToMeshes();
+  npcMeshManager.reset();
+}
+
 mountPhoneHud({
   getSharedState,
+  isGameStarted: () => gameStarted,
   onAppAction: (action) => {
     if (action.kind === 'toggle-app') {
       const key = action.app === 'map' ? 'MAP' : action.app === 'radar' ? 'RADAR' : 'QUERY';
       runtime.appOpen[key] = !runtime.appOpen[key];
       audio.playAppToggle(action.app); // PR #16:切 app "咔" SFX
     } else if (action.kind === 'restart') {
-      gameWon = false;
-      gameOver = false;
-      lowLatch = false; // PR #16:低电警报 latch 复位
-      bgmStarted = true;
-      audio.startBGM(); // PR #16:重开一局,恢复 BGM(若已停)
-      playerStats.reset();
-      player.position.set(0, 0, 8.5);
-      resetPlayerAnimation();
-      // PR #13 #5:新 seed,每局 NPC 占位分布不同(QTE 方案已砍,无 state 需重置)
-      // spec 2026-08-15:红桩数 = 布局 meshNpcCount(缺省 CONFIG.npc.count),与 NpcSystem 实体数一致
-      randomizeOccupiedOutlets(getLevelNpcCount(), (Date.now() % 100000));
-      // PR #16 B:重开新局,NPC 状态重置 + 位置对齐新摆的坐姿猫
-      npcController.reset(Date.now() % 100000);
-      syncNpcPositionsToMeshes();
-      npcMeshManager.reset();
+      restartCurrentLevel();
     }
   },
 });
@@ -164,15 +173,15 @@ mountGtaPrompt({
   getSharedState,
   objectiveText: CONFIG.hud.objectiveText,
   getActiveAppRate: () => {
-    if (runtime.appOpen.MAP) return 2;
-    if (runtime.appOpen.RADAR) return 3;
-    if (runtime.appOpen.QUERY) return 4;
+    if (runtime.appOpen.MAP) return CONFIG.battery.appMult.MAP;
+    if (runtime.appOpen.RADAR) return CONFIG.battery.appMult.RADAR;
+    if (runtime.appOpen.QUERY) return CONFIG.battery.appMult.QUERY;
     return 1;  // home / no app
   },
 });
 
 // PR #16 §2.3 奖励系统 mount(mountGtaPrompt 之后)
-mountMissionToast({ getSharedState });
+mountMissionToast({ getSharedState, onRestart: restartCurrentLevel });
 mountHighScore({ getSharedState });
 
 // --- PR #16 B:NPC AI(状态机 + 头顶箭头)---

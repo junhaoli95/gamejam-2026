@@ -1,205 +1,1757 @@
 {
   "room": {
-    "w": 32,
-    "h": 24
+    "w": 80,
+    "h": 72
+  },
+  "tuning": {
+    "totalGameTimeS": 60,
+    "startPercent": 0.1,
+    "playerWalkSpeed": 3,
+    "npc": {
+      "walkSpeed": 4,
+      "idleMinSec": 0.5,
+      "idleMaxSec": 1.5,
+      "wanderChance": 0.2,
+      "wanderRadius": 4,
+      "arriveDist": 0.8
+    },
+    "appMult": {
+      "MAP": 6,
+      "RADAR": 1.2,
+      "QUERY": 10
+    }
   },
   "outlets": {
-    "seed": null,
-    "studyTableGreenRate": 0.05,
-    "meshNpcCount": 3,
+    "meshNpcCount": 12,
     "meshGreenRandom": [
-      1,
-      2
+      12,
+      12
     ],
-    "meshGreenMin": 2
+    "meshGreenMin": 4,
+    "seed": null,
+    "studyTableGreenRate": 0.04
   },
   "placements": [
     {
       "kind": "bookshelf",
-      "x": 0,
+      "x": -30,
+      "z": -30.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": -26.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": -23,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": -19.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": -16,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": -10.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": -7,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": -3.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 0.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 4,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 7.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 12.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 16,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 19.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 23.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 27,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -30,
+      "z": 30.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -32.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -29,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -25.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -22,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -16,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -12,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -8.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": -1.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 4,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 7.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 11,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 15,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 18.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 22,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 26.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 30,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -22,
+      "z": 34,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": -31,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": -27.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": -24,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": -20,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": -16.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": -13,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
       "z": -9,
       "rotY": 90
     },
     {
       "kind": "bookshelf",
-      "x": 0,
-      "z": -6,
+      "x": -14,
+      "z": -5,
       "rotY": 90
     },
     {
       "kind": "bookshelf",
-      "x": 0,
-      "z": 0,
+      "x": -14,
+      "z": -1.5,
       "rotY": 90
     },
     {
       "kind": "bookshelf",
-      "x": 0,
-      "z": 3,
+      "x": -14,
+      "z": 2,
       "rotY": 90
     },
     {
       "kind": "bookshelf",
-      "x": -12,
-      "z": 0,
-      "rotY": 0
+      "x": -14,
+      "z": 5.5,
+      "rotY": 90
     },
     {
       "kind": "bookshelf",
-      "x": -9,
-      "z": 0,
-      "rotY": 0
+      "x": -14,
+      "z": 9,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": 12.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": 16.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": 20,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": 23.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": 27,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": 30.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -14,
+      "z": 34.5,
+      "rotY": 90
     },
     {
       "kind": "bookshelf",
       "x": -6,
+      "z": -31.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -28,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -24.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -21,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -16,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -12.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -9,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": -1.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 3.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 7,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 11,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 15.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 19.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 23,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 26.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -6,
+      "z": 30,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -34,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -30,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -26.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -23,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -19.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -15.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -12,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -8.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -4.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": -1,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 2.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 7,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 10.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 14.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 18,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 21.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 25,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 28.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 14,
+      "z": 32.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -31,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -27.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -24,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -20.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -16.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -13,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -9.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -5.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": -2,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 1.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 5.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 9,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 12.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 16.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 20,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 23.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 27.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 31,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 22,
+      "z": 35,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -33.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -30,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -26.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -22.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -19,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -15.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -11,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -7.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": -4,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
       "z": 0,
-      "rotY": 0
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 3.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 7,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 11.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 15,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 18.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 22,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 25.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 29.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 30,
+      "z": 33,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -29.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -25.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -22,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -18.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -15,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -9.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -5.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": -2,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 1.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 10,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 13.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 17,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 21,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 24.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 28,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 37,
+      "z": 32.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -28,
+      "z": -18
+    },
+    {
+      "kind": "bookshelf",
+      "x": -24,
+      "z": -18
+    },
+    {
+      "kind": "bookshelf",
+      "x": -19.5,
+      "z": -4
+    },
+    {
+      "kind": "bookshelf",
+      "x": -16,
+      "z": -4
+    },
+    {
+      "kind": "bookshelf",
+      "x": -11.5,
+      "z": 7
+    },
+    {
+      "kind": "bookshelf",
+      "x": -8,
+      "z": 7
+    },
+    {
+      "kind": "bookshelf",
+      "x": -11.5,
+      "z": 14
+    },
+    {
+      "kind": "bookshelf",
+      "x": -8,
+      "z": 14
+    },
+    {
+      "kind": "bookshelf",
+      "x": 16.5,
+      "z": -2
+    },
+    {
+      "kind": "bookshelf",
+      "x": 20,
+      "z": -2
+    },
+    {
+      "kind": "bookshelf",
+      "x": 24.5,
+      "z": 7
+    },
+    {
+      "kind": "bookshelf",
+      "x": 28,
+      "z": 7
+    },
+    {
+      "kind": "bookshelf",
+      "x": 16.5,
+      "z": 23
+    },
+    {
+      "kind": "bookshelf",
+      "x": 20,
+      "z": 23
+    },
+    {
+      "kind": "bookshelf",
+      "x": 24.5,
+      "z": -12
+    },
+    {
+      "kind": "bookshelf",
+      "x": 28,
+      "z": -12
     },
     {
       "kind": "bookshelf",
       "x": -3,
-      "z": 0,
-      "rotY": 0
+      "z": -28.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -3,
+      "z": -25,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -3,
+      "z": -21.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -3,
+      "z": 19,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -3,
+      "z": 23,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -3,
+      "z": 26.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -3,
+      "z": 30,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": -31,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": -27,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": -23.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": -20,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": 17,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": 20.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": 24,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": 28,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": 7,
+      "z": 31.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -8,
+      "z": -18
+    },
+    {
+      "kind": "bookshelf",
+      "x": -4,
+      "z": -18
+    },
+    {
+      "kind": "bookshelf",
+      "x": -2,
+      "z": 17
+    },
+    {
+      "kind": "bookshelf",
+      "x": 1.5,
+      "z": 17
+    },
+    {
+      "kind": "bookshelf",
+      "x": 5,
+      "z": 17
+    },
+    {
+      "kind": "bookshelf",
+      "x": -4,
+      "z": -16.5
+    },
+    {
+      "kind": "bookshelf",
+      "x": -0.5,
+      "z": -16.5
     },
     {
       "kind": "bookshelf",
       "x": 3,
-      "z": 0,
-      "rotY": 0
+      "z": -16.5
     },
     {
       "kind": "bookshelf",
-      "x": 6,
-      "z": 0,
-      "rotY": 0
+      "x": -4,
+      "z": 13.5
     },
     {
       "kind": "bookshelf",
-      "x": 9,
-      "z": 0,
-      "rotY": 0
+      "x": 0,
+      "z": 13.5
     },
     {
       "kind": "bookshelf",
-      "x": 12,
-      "z": 0,
-      "rotY": 0
+      "x": 2.5,
+      "z": -25.5,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": -9,
-      "z": -8.5
+      "kind": "bookshelf",
+      "x": 2.5,
+      "z": -22,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": -5,
-      "z": -8.5
+      "kind": "bookshelf",
+      "x": 2.5,
+      "z": -18.5,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": -9,
-      "z": -4.5
+      "kind": "bookshelf",
+      "x": 12.5,
+      "z": -25.5,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": -5,
-      "z": -4.5
+      "kind": "bookshelf",
+      "x": 12.5,
+      "z": -22,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": 9,
-      "z": -9
+      "kind": "bookshelf",
+      "x": 12.5,
+      "z": -18.5,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": 5,
-      "z": -9
+      "kind": "bookshelf",
+      "x": 12.5,
+      "z": 18.5,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": 9,
-      "z": -5
+      "kind": "bookshelf",
+      "x": 12.5,
+      "z": 22,
+      "rotY": 90
     },
     {
-      "kind": "studyTable",
-      "x": 5,
-      "z": -5
+      "kind": "bookshelf",
+      "x": 12.5,
+      "z": 25.5,
+      "rotY": 90
     },
     {
-      "kind": "studyTable-charge",
-      "x": 7,
-      "z": -2.6
-    },
-    {
-      "kind": "studyTable",
-      "x": -9,
-      "z": 3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": -5,
-      "z": 3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": -9,
-      "z": 7.5
-    },
-    {
-      "kind": "studyTable",
-      "x": -5,
-      "z": 7.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 9,
-      "z": 3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 5,
-      "z": 3.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 9,
-      "z": 7.5
-    },
-    {
-      "kind": "studyTable",
-      "x": 5,
-      "z": 7.5
-    },
-    {
-      "kind": "column",
-      "x": -14,
-      "z": 10.5
-    },
-    {
-      "kind": "column",
-      "x": 14,
-      "z": 10.5
-    },
-    {
-      "kind": "column",
-      "x": -14,
+      "kind": "bookshelf",
+      "x": -28,
       "z": -10.5
     },
     {
-      "kind": "column",
-      "x": 14,
+      "kind": "bookshelf",
+      "x": -24,
       "z": -10.5
+    },
+    {
+      "kind": "bookshelf",
+      "x": -20,
+      "z": -10.5
+    },
+    {
+      "kind": "bookshelf",
+      "x": 16.5,
+      "z": -10.5
+    },
+    {
+      "kind": "bookshelf",
+      "x": 24.5,
+      "z": 5
+    },
+    {
+      "kind": "column",
+      "x": -26,
+      "z": -30
+    },
+    {
+      "kind": "column",
+      "x": -18,
+      "z": -28
+    },
+    {
+      "kind": "column",
+      "x": -10,
+      "z": -22
+    },
+    {
+      "kind": "column",
+      "x": -26,
+      "z": 2
+    },
+    {
+      "kind": "column",
+      "x": -18,
+      "z": 9
+    },
+    {
+      "kind": "column",
+      "x": -10,
+      "z": 24
+    },
+    {
+      "kind": "column",
+      "x": -26,
+      "z": 24
+    },
+    {
+      "kind": "column",
+      "x": -18,
+      "z": 30
+    },
+    {
+      "kind": "column",
+      "x": -10,
+      "z": -2
+    },
+    {
+      "kind": "column",
+      "x": 18,
+      "z": -24
+    },
+    {
+      "kind": "column",
+      "x": 26,
+      "z": -18
+    },
+    {
+      "kind": "column",
+      "x": 33.5,
+      "z": -6
+    },
+    {
+      "kind": "column",
+      "x": 18,
+      "z": 4
+    },
+    {
+      "kind": "column",
+      "x": 26,
+      "z": 15
+    },
+    {
+      "kind": "column",
+      "x": 33.5,
+      "z": 24
+    },
+    {
+      "kind": "column",
+      "x": 18,
+      "z": 27
+    },
+    {
+      "kind": "column",
+      "x": 26,
+      "z": 32
+    },
+    {
+      "kind": "column",
+      "x": 33.5,
+      "z": 6
+    },
+    {
+      "kind": "column",
+      "x": -8.5,
+      "z": -32
+    },
+    {
+      "kind": "column",
+      "x": -8.5,
+      "z": 31
     },
     {
       "kind": "column",
       "x": 0,
-      "z": -2.5
+      "z": -32
+    },
+    {
+      "kind": "column",
+      "x": 10,
+      "z": -28
+    },
+    {
+      "kind": "column",
+      "x": 10,
+      "z": 25
+    },
+    {
+      "kind": "column",
+      "x": -34,
+      "z": 28
+    },
+    {
+      "kind": "column",
+      "x": -34,
+      "z": -28
+    },
+    {
+      "kind": "column",
+      "x": 35,
+      "z": -31
+    },
+    {
+      "kind": "column",
+      "x": 35,
+      "z": 30
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -32,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -28.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -25,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -21,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -17.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -10,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -6.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": -3,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 1,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 4.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 12,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 15.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 19,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 23,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 26.5,
+      "rotY": 90
+    },
+    {
+      "kind": "bookshelf",
+      "x": -35,
+      "z": 30,
+      "rotY": 90
+    },
+    {
+      "kind": "column",
+      "x": -32.5,
+      "z": -12.5
+    },
+    {
+      "kind": "column",
+      "x": -32.5,
+      "z": 8.5
+    },
+    {
+      "kind": "column",
+      "x": -26,
+      "z": -15
+    },
+    {
+      "kind": "column",
+      "x": -26,
+      "z": 16
+    },
+    {
+      "kind": "column",
+      "x": -18,
+      "z": -18
+    },
+    {
+      "kind": "column",
+      "x": -18,
+      "z": 4
+    },
+    {
+      "kind": "column",
+      "x": -10,
+      "z": -16
+    },
+    {
+      "kind": "column",
+      "x": -10,
+      "z": 13
     },
     {
       "kind": "column",
       "x": 0,
-      "z": -11.5
+      "z": -15
+    },
+    {
+      "kind": "column",
+      "x": 0,
+      "z": 15
+    },
+    {
+      "kind": "column",
+      "x": 10,
+      "z": -16
+    },
+    {
+      "kind": "column",
+      "x": 10,
+      "z": 14
+    },
+    {
+      "kind": "column",
+      "x": 18,
+      "z": -17
+    },
+    {
+      "kind": "column",
+      "x": 18,
+      "z": 12
+    },
+    {
+      "kind": "column",
+      "x": 26,
+      "z": -4
+    },
+    {
+      "kind": "column",
+      "x": 26,
+      "z": 21
+    },
+    {
+      "kind": "column",
+      "x": 33.5,
+      "z": -17
+    },
+    {
+      "kind": "column",
+      "x": 33.5,
+      "z": 17
+    },
+    {
+      "kind": "column",
+      "x": -4,
+      "z": -32
+    },
+    {
+      "kind": "column",
+      "x": 4,
+      "z": 32
+    },
+    {
+      "kind": "studyTable",
+      "x": -26,
+      "z": -27
+    },
+    {
+      "kind": "studyTable",
+      "x": -26,
+      "z": -22
+    },
+    {
+      "kind": "studyTable",
+      "x": -26,
+      "z": -7
+    },
+    {
+      "kind": "studyTable",
+      "x": -26,
+      "z": -2
+    },
+    {
+      "kind": "studyTable",
+      "x": -26,
+      "z": 8
+    },
+    {
+      "kind": "studyTable",
+      "x": -26,
+      "z": 13
+    },
+    {
+      "kind": "studyTable",
+      "x": -26,
+      "z": 28
+    },
+    {
+      "kind": "studyTable",
+      "x": -18,
+      "z": -32
+    },
+    {
+      "kind": "studyTable",
+      "x": -18,
+      "z": -22
+    },
+    {
+      "kind": "studyTable",
+      "x": -18,
+      "z": -7
+    },
+    {
+      "kind": "studyTable",
+      "x": -18,
+      "z": 13
+    },
+    {
+      "kind": "studyTable",
+      "x": -18,
+      "z": 18
+    },
+    {
+      "kind": "studyTable",
+      "x": -18,
+      "z": 23
+    },
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": -27
+    },
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": -12
+    },
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": -7
+    },
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": 3
+    },
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": 18
+    },
+    {
+      "kind": "studyTable",
+      "x": -10,
+      "z": 28
+    },
+    {
+      "kind": "studyTable",
+      "x": 0.5,
+      "z": -12
+    },
+    {
+      "kind": "studyTable",
+      "x": 0.5,
+      "z": -7
+    },
+    {
+      "kind": "studyTable",
+      "x": 0.5,
+      "z": -2
+    },
+    {
+      "kind": "studyTable",
+      "x": 0.5,
+      "z": 3
+    },
+    {
+      "kind": "studyTable",
+      "x": 2.5,
+      "z": 8
+    },
+    {
+      "kind": "studyTable",
+      "x": 2.5,
+      "z": 23
+    },
+    {
+      "kind": "studyTable",
+      "x": 2.5,
+      "z": 28
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.5,
+      "z": -12
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.5,
+      "z": -7
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.5,
+      "z": -2
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.5,
+      "z": 3
+    },
+    {
+      "kind": "studyTable",
+      "x": 8.5,
+      "z": 8
+    },
+    {
+      "kind": "studyTable",
+      "x": 18,
+      "z": -32
+    },
+    {
+      "kind": "studyTable",
+      "x": 18,
+      "z": -27
+    },
+    {
+      "kind": "studyTable",
+      "x": 18,
+      "z": -7
+    },
+    {
+      "kind": "studyTable",
+      "x": 18,
+      "z": 8
+    },
+    {
+      "kind": "studyTable",
+      "x": 18,
+      "z": 18
+    },
+    {
+      "kind": "studyTable",
+      "x": 26,
+      "z": -32
+    },
+    {
+      "kind": "studyTable",
+      "x": 26,
+      "z": -27
+    },
+    {
+      "kind": "studyTable",
+      "x": 26,
+      "z": -22
+    },
+    {
+      "kind": "studyTable",
+      "x": 26,
+      "z": -7
+    },
+    {
+      "kind": "studyTable",
+      "x": 26,
+      "z": 18
+    },
+    {
+      "kind": "studyTable",
+      "x": 26,
+      "z": 28
+    },
+    {
+      "kind": "studyTable",
+      "x": 35.5,
+      "z": -12
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { SharedState, AppAction } from '../platform/sharedState';
+import { CONFIG } from '../game/config';
 import { createMinimap, type MinimapHandle } from './minimap';
 
 // ============================================================================
@@ -26,6 +27,8 @@ import { createMinimap, type MinimapHandle } from './minimap';
 export interface PhoneHudOptions {
   getSharedState: () => SharedState;
   onAppAction: (action: AppAction) => void;
+  /** True once the title/level overlay has handed control to the game. */
+  isGameStarted?: () => boolean;
 }
 
 type AppId = 'home' | 'map' | 'radar' | 'query';
@@ -195,6 +198,8 @@ const CSS = `
   gap: 4px;
 }
 .phone-app-glyph {
+  position: relative;
+  overflow: hidden;
   width: 60px;
   height: 60px;
   display: flex;
@@ -232,27 +237,44 @@ const CSS = `
   opacity: 0;
 }
 
-/* install ring (SVG overlay) */
-.install-ring {
+/* app install fill: each icon fills from bottom like a charging cell */
+.phone-app-charge-fill {
   position: absolute;
-  top: 0;
   left: 0;
-  width: 60px;
-  height: 60px;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  transform: scaleY(0);
+  transform-origin: bottom;
+  background: linear-gradient(180deg, rgba(45,255,122,0.18), rgba(45,255,122,0.82));
+  box-shadow: 0 -5px 16px rgba(45,255,122,0.42);
+  opacity: 0;
   pointer-events: none;
+  z-index: 0;
 }
-.install-active { transition: stroke-dashoffset .05s linear; }
-.phone-app-icon.installing .install-active {
-  animation: install-ring 600ms linear forwards;
+.phone-app-emoji {
+  position: relative;
+  z-index: 1;
 }
-@keyframes install-ring {
-  from { stroke-dashoffset: 163.42; }
-  to   { stroke-dashoffset: 0; }
+.phone-app-icon.installing .phone-app-charge-fill {
+  opacity: 1;
+  animation: app-charge-fill 650ms linear forwards;
 }
-.phone-app-icon.ready .install-ring { display: none; }
+.phone-app-icon.installing .phone-app-state-tag {
+  opacity: 1;
+  color: #2dff7a;
+}
+.phone-app-icon.ready .phone-app-charge-fill {
+  transform: scaleY(1);
+  opacity: 0;
+  transition: opacity .28s ease-out;
+}
 .phone-app-icon.ready .phone-app-state-tag { animation: fade-state-in .45s ease-out forwards; }
+@keyframes app-charge-fill {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
 @keyframes fade-state-in { from { opacity: 0; } to { opacity: 1; } }
-.phone-app-icon.pending .install-active { stroke-dashoffset: 163.42; }
 .phone-app-icon.pending .phone-app-glyph { filter: grayscale(0.8) brightness(0.6); }
 .phone-app-icon.pending .phone-app-glyph.pending { filter: grayscale(0.4) brightness(0.85); opacity: 0.55; }
 
@@ -463,20 +485,6 @@ function drawRadar(
   ctx.fillText(`${emptyN} free / ${occN} used`, W / 2, H - 4);
 }
 
-// build SVG progress ring markup string for a single app icon.
-const RING_C = 2 * Math.PI * 26; // ≈ 163.42
-function ringSvg(): string {
-  return (
-    `<svg class="install-ring" viewBox="0 0 56 56">` +
-    `<circle class="install-track" cx="28" cy="28" r="26" ` +
-    `fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>` +
-    `<circle class="install-active" cx="28" cy="28" r="26" ` +
-    `fill="none" stroke="#2dff7a" stroke-width="2.5" ` +
-    `stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}" ` +
-    `transform="rotate(-90, 28, 28)"/></svg>`
-  );
-}
-
 export function mountPhoneHud(opts: PhoneHudOptions): void {
   injectStylesOnce();
 
@@ -524,7 +532,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-header map">
         <span class="app-header-back">← Back (1)</span>
         <span class="app-header-title">🗺 MAP</span>
-        <span class="app-header-rate">Power ×2</span>
+        <span class="app-header-rate">Power ×${CONFIG.battery.appMult.MAP}</span>
       </div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
     </div>
@@ -532,7 +540,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-header radar">
         <span class="app-header-back">← Back (2)</span>
         <span class="app-header-title">📡 RADAR</span>
-        <span class="app-header-rate">Power ×3</span>
+        <span class="app-header-rate">Power ×${CONFIG.battery.appMult.RADAR}</span>
       </div>
       <div class="canvas-wrap"><canvas width="220" height="220"></canvas></div>
     </div>
@@ -540,7 +548,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-header query">
         <span class="app-header-back">← Back (3)</span>
         <span class="app-header-title">⚡ QUERY</span>
-        <span class="app-header-rate">Power ×4</span>
+        <span class="app-header-rate">Power ×${CONFIG.battery.appMult.QUERY}</span>
       </div>
       <div class="phone-query-legend"></div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
@@ -585,15 +593,16 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   // PR #13 §3.1:rate 字段 = home icon 下显示的耗电倍率(isReal=false 等待安装 icon 不显示)
   type IconDef = { id: AppId; glyphClass: string; emoji: string; label: string; rate?: string; isReal: boolean };
   const ICONS: IconDef[] = [
-    { id: 'map',   glyphClass: 'map',    emoji: '🗺', label: 'MAP',   rate: '×2', isReal: true },
-    { id: 'radar', glyphClass: 'radar',  emoji: '📡', label: 'RADAR', rate: '×3', isReal: true },
-    { id: 'query', glyphClass: 'query',  emoji: '⚡', label: 'QUERY', rate: '×4', isReal: true },
+    { id: 'map',   glyphClass: 'map',    emoji: '🗺', label: 'MAP',   rate: `×${CONFIG.battery.appMult.MAP}`, isReal: true },
+    { id: 'radar', glyphClass: 'radar',  emoji: '📡', label: 'RADAR', rate: `×${CONFIG.battery.appMult.RADAR}`, isReal: true },
+    { id: 'query', glyphClass: 'query',  emoji: '⚡', label: 'QUERY', rate: `×${CONFIG.battery.appMult.QUERY}`, isReal: true },
     { id: 'home',  glyphClass: 'pending', emoji: '🐾', label: 'Pending Install', isReal: false },
   ];
 
   const iconEls: Record<string, HTMLElement> = {};
   const installTimers: number[] = [];
-  let onboardingActive = true;
+  let onboardingActive = false;
+  let onboardingStarted = false;
 
   function setStateClass(icon: HTMLElement, state: 'pending' | 'installing' | 'ready'): void {
     icon.classList.remove('pending', 'installing', 'ready');
@@ -605,8 +614,11 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   }
 
   function startOnboarding(): void {
+    if (onboardingStarted) return;
+    onboardingStarted = true;
+    onboardingActive = true;
     // 3 real apps stagger by 200ms; each runs 200ms pending → 600ms installing
-    // (CSS keyframe drives the 0→100% ring) → ready.  4th placeholder stays
+    // (CSS keyframe drives the 0→100% tile fill) → ready.  4th placeholder stays
     // pending permanently.
     ICONS.forEach((icon, i) => {
       const el = iconEls[icon.id];
@@ -645,16 +657,13 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     const cell = document.createElement('div');
     cell.className = 'phone-app-icon pending';
     cell.innerHTML = `
-      ${icon.isReal ? ringSvg() : ''}
-      <div class="phone-app-glyph ${icon.glyphClass}">${icon.emoji}</div>
+      <div class="phone-app-glyph ${icon.glyphClass}">${icon.isReal ? '<span class="phone-app-charge-fill"></span>' : ''}<span class="phone-app-emoji">${icon.emoji}</span></div>
       <div class="phone-app-label">${icon.label}</div>
       ${icon.rate ? `<div class="phone-app-rate">${icon.rate}</div>` : ''}
       <div class="phone-app-state-tag">Pending</div>`;
     iconEls[icon.id] = cell;
     gridEl.appendChild(cell);
   }
-  startOnboarding();
-
   // ── app switching ────────────────────────────────────────────────────────
   let activeApp: AppId = 'home';
 
@@ -726,10 +735,40 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
 
   // ── RAF — realtime every-frame read of getSharedState (§10 decision 5) ────
   let rafId = 0;
+  // 胜利充电动画(cosmetic):won 边沿启动,从当前电量以 2s/1% 速率充到 100%。
+  // 纯装饰,不阻塞 R 键重开;restart(won 回 false)自动复位。
+  let winAnimActive = false;
+  let winAnimBattery = 0;
+  let winAnimLastTs = 0;
+  let lastWonHud = false;
+  const WIN_CHARGE_PER_SEC = 0.005; // 2s 充 1% → 0.01/2
+
   function loop(): void {
     rafId = requestAnimationFrame(loop);
+    if (!onboardingStarted && (opts.isGameStarted?.() ?? true)) startOnboarding();
     const state = opts.getSharedState(); // fresh snapshot every frame
-    const battery = state.battery;
+
+    // 胜利充电动画边沿控制
+    const won = state.won === true;
+    if (won && !lastWonHud) {
+      winAnimActive = true;
+      winAnimBattery = state.battery;
+      winAnimLastTs = performance.now();
+    }
+    if (!won && lastWonHud) {
+      winAnimActive = false;
+    }
+    lastWonHud = won;
+
+    let displayBattery = state.battery;
+    if (winAnimActive) {
+      const now = performance.now();
+      const dt = (now - winAnimLastTs) / 1000;
+      winAnimLastTs = now;
+      winAnimBattery = Math.min(1, winAnimBattery + dt * WIN_CHARGE_PER_SEC);
+      displayBattery = winAnimBattery;
+    }
+    const battery = displayBattery;
 
     // battery fill bar (scaleY from bottom; master §3.4)
     const fillScale = Math.max(0, Math.min(1, battery));
@@ -739,13 +778,13 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     // 百分比(剩余秒数移至底部 GTA 指南条)
     battPctEl.textContent = `${Math.round(battery * 100)}%`;
 
-    // thresholds: ≤10% banner show; ≤3% +blink; ≤0 blackout.
+    // thresholds: ≤10% banner show;≤3% +blink;≤0 blackout.
     const low = battery <= 0.10;
-    bannerEl.classList.toggle('show', low);
-    bannerEl.classList.toggle('blink', low && battery <= 0.03);
+    bannerEl.classList.toggle('show', low && !winAnimActive);
+    bannerEl.classList.toggle('blink', low && battery <= 0.03 && !winAnimActive);
     // TODO ⚠ ≤3% blink: heartbeat SFX is wired by PR #10 (David) once the audio
     //      platform module lands; this UI layer only flashes.
-    blackoutEl.classList.toggle('show', battery <= 0);
+    blackoutEl.classList.toggle('show', battery <= 0 && !winAnimActive);
 
     // QUERY legend counts (computed each frame from current state.outlets)
     const emptyN = state.outlets.filter((o) => !o.occupied).length;
