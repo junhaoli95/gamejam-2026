@@ -31,7 +31,7 @@
 - Produces `createSeatedCat(palette, rotationY) -> THREE.Group`.
 - Produces `computeCatWalkPose(phase, isDashing) -> CatPose`.
 
-- [ ] **Step 1: Write failing pure pose tests**
+- [x] **Step 1: Write failing pure pose tests**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -54,7 +54,7 @@ describe('computeCatWalkPose', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -64,11 +64,11 @@ npm test -- src/scene/proceduralCat.test.ts
 
 Expected: FAIL because `src/scene/proceduralCat.ts` does not exist.
 
-- [ ] **Step 3: Implement pure pose calculation**
+- [x] **Step 3: Implement pure pose calculation**
 
 Define `CatPose` with `frontLeft`, `frontRight`, `rearLeft`, `rearRight`, `bodyBob`, `headBob`, `tailSway`, and `lean`. Use sine/cosine only; `isDashing` increases stride and lean without changing any world position.
 
-- [ ] **Step 4: Add failing group and palette tests**
+- [x] **Step 4: Add failing group and palette tests**
 
 ```ts
 import * as THREE from 'three';
@@ -89,7 +89,7 @@ it('keeps seated cats as a separate pose', () => {
 });
 ```
 
-- [ ] **Step 5: Run the focused test and verify RED**
+- [x] **Step 5: Run the focused test and verify RED**
 
 Run:
 
@@ -99,7 +99,7 @@ npm test -- src/scene/proceduralCat.test.ts
 
 Expected: the new group tests fail until the geometry builder exists.
 
-- [ ] **Step 6: Implement low-poly cat geometry**
+- [x] **Step 6: Implement low-poly cat geometry**
 
 Implement `proceduralCat.ts` with:
 
@@ -112,7 +112,7 @@ Implement `proceduralCat.ts` with:
 
 Use a standing height near `1.2m`, a body width near `0.55m`, and a root bottom at `y=0`.
 
-- [ ] **Step 7: Run focused tests and verify GREEN**
+- [x] **Step 7: Run focused tests and verify GREEN**
 
 Run:
 
@@ -138,7 +138,7 @@ Expected: all cat-module tests pass.
 - `createNpcMeshManager().update` changes from `(entities)` to `(entities, dt)`.
 - Produces standing player/NPC visuals while preserving `LibraryScene.player`, `npcMeshes`, and all game interfaces.
 
-- [ ] **Step 1: Write the failing animation test**
+- [x] **Step 1: Write the failing animation test**
 
 Extend the module-level tests to call `updateCatAnimation` twice with movement and assert that a named leg transform changes while the root position remains unchanged:
 
@@ -157,7 +157,7 @@ it('animates child limbs without moving the gameplay root', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -167,11 +167,11 @@ npm test -- src/scene/proceduralCat.test.ts
 
 Expected: the integration assertion fails because `updateCatAnimation` is not implemented yet.
 
-- [ ] **Step 3: Implement animation state and child transforms**
+- [x] **Step 3: Implement animation state and child transforms**
 
 Add the `WeakMap<THREE.Group, CatRig>` to `proceduralCat.ts` and implement `updateCatAnimation()` so it advances phase from `speed * dt`, applies the pure pose to named limbs/body/head/tail, handles idle and dash, and never changes the root position.
 
-- [ ] **Step 4: Replace scene-local player and cat construction**
+- [x] **Step 4: Replace scene-local player and cat construction**
 
 In `loadLibraryScene.ts`:
 
@@ -182,7 +182,7 @@ In `loadLibraryScene.ts`:
 - Create moving outlet NPCs as standing cats at root y `0`.
 - In the returned scene `update(dt)`, compute player `x/z` delta from a stored previous position and call `updateCatAnimation` with speed/direction; reset the stored position when the player is reset.
 
-- [ ] **Step 5: Drive moving NPC animation from position deltas**
+- [x] **Step 5: Drive moving NPC animation from position deltas**
 
 In `npcMesh.ts`:
 
@@ -193,7 +193,7 @@ In `npcMesh.ts`:
 - Set standing NPC root y to `0` and rotate it toward the movement direction only when speed is above threshold.
 - Set arrow height from the standing cat height instead of the old seated-cat `MESH_Y`.
 
-- [ ] **Step 6: Pass clamped dt from the main loop**
+- [x] **Step 6: Pass clamped dt from the main loop**
 
 Change only the existing call site in `main.ts`:
 
@@ -203,7 +203,7 @@ npcMeshManager.update(npcController.entities, dt);
 
 Do not modify `NpcEntity`, `NpcController`, pathfinding, collision, or game state.
 
-- [ ] **Step 7: Run all tests and build**
+- [x] **Step 7: Run all tests and build**
 
 Run:
 
@@ -214,7 +214,7 @@ npm run build
 
 Expected: all existing tests plus cat tests pass; build exits with code 0.
 
-- [ ] **Step 8: Run browser verification**
+- [x] **Step 8: Run browser verification**
 
 Start the dev server from this worktree and verify:
 
@@ -225,7 +225,7 @@ Start the dev server from this worktree and verify:
 - NPC arrows stay above standing cats.
 - No cat floats, sinks, rotates incorrectly, or changes collision behavior.
 
-- [ ] **Step 9: Commit the implementation**
+- [x] **Step 9: Commit the implementation**
 
 ```bash
 git add src/scene/proceduralCat.ts src/scene/proceduralCat.test.ts src/scene/loadLibraryScene.ts src/scene/npcMesh.ts src/main.ts

@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { loadGlbNormalized } from '../../snippets/loadGlb';
 import { CONFIG } from '../game/config';
+import {
+  BROWN_TABBY_PALETTE,
+  createSeatedCat as createProceduralSeatedCat,
+  createStandingCat,
+  disposeProceduralCat,
+  updateCatAnimation,
+  type CatPalette,
+} from './proceduralCat';
 import { createProceduralBookshelf } from './proceduralLibraryProps';
 import layout from './layout.json';
 // PR #28 标题屏选关 — 4 个布局快照(Sam PR #24 验过的 5 个布局,Islands = layout.json):
@@ -293,6 +301,7 @@ export interface LibraryScene {
   /** 所有电位位置(柱电位+端板盒+桌电位+壁插),供 SharedState/minimap 消费。 */
   outlets: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean; kind: 'mesh' | 'table' }>;
   update: (dt: number) => void;
+  resetPlayerAnimation: () => void;
   /** Debug overlay 用:按新 params 拆除并重建桌区(桌椅猫+电位+collider+helper)。 */
   rebuildTableZone: (params: DebugParams) => void;
   /** Debug overlay 用:显示/隐藏全部 collider 的线框。 */
@@ -309,6 +318,7 @@ export interface LibraryScene {
 
 /** 占位椅:座面 + 靠背(靠背在远离桌子一侧,axis=椅子朝向所在轴)。 */
 const chairMat = new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.7, metalness: 0 });
+chairMat.userData.sharedResource = true;
 function createChair(side: 1 | -1, axis: 'x' | 'z'): THREE.Group {
   const g = new THREE.Group();
   const seat = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), chairMat);
@@ -324,62 +334,19 @@ function createChair(side: 1 | -1, axis: 'x' | 'z'): THREE.Group {
   return g;
 }
 
-/** 坐姿占位猫(省略眼/尾,背面视角为主):身体微压扁,五色皮毛轮换。 */
+/** NPC palette 轮换;主角固定使用用户猫参考的棕色虎斑 palette。 */
 const FUR_COLORS = [0xe8913a, 0x8a8a8a, 0x3a3a3a, 0xf0e6d2, 0x6b4a2a];
-const furMatCache = new Map<number, THREE.MeshStandardMaterial>();
-function furMat(color: number): THREE.MeshStandardMaterial {
-  let m = furMatCache.get(color);
-  if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0 });
-    furMatCache.set(color, m);
-  }
-  return m;
+function paletteForFur(color: number): CatPalette {
+  return { ...BROWN_TABBY_PALETTE, fur: color, furLight: color };
 }
 function createSeatedCat(furColor: number, rotY: number): THREE.Group {
-  const cat = new THREE.Group();
-  const fur = furMat(furColor);
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.3, 4, 10), fur);
-  body.scale.y = 0.8;
-  body.position.y = 0.33;
-  cat.add(body);
-  for (const s of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 8), fur);
-    ear.position.set(0.13 * s, 0.62, 0);
-    ear.rotation.z = -0.18 * s;
-    cat.add(ear);
-  }
-  cat.rotation.y = rotY;
-  return cat;
+  return createProceduralSeatedCat(paletteForFur(furColor), rotY);
 }
 
-/** 占位猫:胶囊身 + 圆锥耳 + 球眼 + 翘尾,面向 -z(书库深处)。 */
+/** 主角站立猫:根节点落地,controller 继续只改 root position/rotation。 */
 function createPlaceholderCat(): THREE.Group {
-  const cat = new THREE.Group();
+  const cat = createStandingCat(BROWN_TABBY_PALETTE);
   cat.name = 'placeholderPlayer';
-  const fur = new THREE.MeshStandardMaterial({ color: 0xe8913a, roughness: 0.7, metalness: 0 });
-  const black = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0 });
-
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.45, 4, 12), fur);
-  body.position.y = 0.505;
-  cat.add(body);
-
-  for (const side of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.24, 8), fur);
-    ear.position.set(0.16 * side, 1.08, 0);
-    ear.rotation.z = -0.18 * side;
-    cat.add(ear);
-
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), black);
-    eye.position.set(0.11 * side, 0.72, -0.235);
-    cat.add(eye);
-  }
-
-  const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.5, 8), fur);
-  tail.position.set(0, 0.42, 0.32);
-  tail.rotation.x = -0.8;
-  cat.add(tail);
-
-  cat.traverse(obj => { obj.castShadow = true; });
   cat.position.set(SPAWN.x, 0, SPAWN.z);
   return cat;
 }
@@ -391,11 +358,21 @@ function buildShelfPlaceholder(dim: { w: number; h: number; d: number }): THREE.
 
 function disposeObject(root: THREE.Object3D): void {
   root.traverse(obj => {
-    const mesh = obj as THREE.Mesh;
-    if (mesh.geometry) mesh.geometry.dispose();
-    const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-    if (Array.isArray(mat)) mat.forEach(m => m.dispose());
-    else if (mat) mat.dispose();
+    if (!(obj instanceof THREE.Mesh)) return;
+    if (obj.geometry && !obj.geometry.userData.sharedResource) obj.geometry.dispose();
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const material of materials) {
+      if (!material.userData.sharedResource) material.dispose();
+    }
+  });
+}
+
+function markSharedResources(root: THREE.Object3D): void {
+  root.traverse(obj => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    obj.geometry.userData.sharedResource = true;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const material of materials) material.userData.sharedResource = true;
   });
 }
 
@@ -579,6 +556,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     roughness: 0.4,
     metalness: 0,
   });
+  outletMatEmpty.userData.sharedResource = true;
+  outletMatOccupied.userData.sharedResource = true;
 
   // PR #13 #4:每个 outlet 对应一个 mesh 数组(柱电位/端板/壁插 = 单元素,桌电位 = 双元素)。
   // 与 outletPositions 同序;setOutletOccupied / randomizeOccupiedOutlets 遍历 group 全切色。
@@ -618,6 +597,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   // PR #12 §2.5.4 / PR #13 #3:NPC 占位坐姿猫(createSeatedCat,随机毛色+朝向),
   // 放在选中桩的 (x, 0.45, z+0.6)。换 GLB 时只改 createSeatedCat 函数体。
   const npcMeshes: THREE.Group[] = [];
+  const staticSeatedCats = new Set<THREE.Group>();
+  const tableSeatedCats = new Set<THREE.Group>();
   const NPC_SEED = Math.floor(Math.random() * 0x7fffffff) | 0;  // 每局不同
 
   // ── 窗边 readingTable 座位:静态(2 人桌,西侧椅)──
@@ -646,6 +627,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
           const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], -Math.PI / 2);
           cat.position.set(sx, 0.45, sz);
           scene.add(cat);
+          staticSeatedCats.add(cat);
         }
       }
     }
@@ -654,6 +636,10 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   // ── 玩家 + tableZone Group(桌椅猫重建时不碰玩家)──
   const player = createPlaceholderCat();
   scene.add(player);
+  const previousPlayerPosition = player.position.clone();
+  const resetPlayerAnimation = (): void => {
+    previousPlayerPosition.copy(player.position);
+  };
 
   const tableZone = new THREE.Group();
   tableZone.name = 'tableZone';
@@ -674,6 +660,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
         const cz = (box.min.z + box.max.z) / 2;
         template.position.x -= cx;
         template.position.z -= cz;
+        markSharedResources(template);
         studyTableGlbTemplate = template;
         // 加载到的那刻,把桌区当前 placeholder 全替成 GLB clone
         rebuildTableZone(currentParams);
@@ -797,6 +784,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
           const cat = createSeatedCat(FUR_COLORS[furIdx++ % FUR_COLORS.length], tableRot + (side === 1 ? 0 : Math.PI));
           cat.position.set(sx, 0.45, sz);
           tableZone.add(cat);
+          tableSeatedCats.add(cat);
         }
         si++;
       }
@@ -806,6 +794,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   }
 
   const studyOutletGeo = new THREE.BoxGeometry(0.2, 0.02, 0.2);
+  studyOutletGeo.userData.sharedResource = true;
 
   function pushTableHelper(b: THREE.Box3): void {
     const h = new THREE.Box3Helper(b, HELPER_COLOR_TABLE);
@@ -820,8 +809,10 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     while (tableZone.children.length) {
       const c = tableZone.children[0];
       tableZone.remove(c);
-      disposeObject(c);
+      if (c.userData.proceduralCat) disposeProceduralCat(c as THREE.Group);
+      else disposeObject(c);
     }
+    tableSeatedCats.clear();
     tableColliders.length = 0;
     for (const h of tableHelpers) scene.remove(h);
     tableHelpers.length = 0;
@@ -859,6 +850,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     colliders.push(...staticColliders, ...tableColliders);
 
     console.log(`[debug] rebuild table zone: tables=${tablePlacements.length}, outlets=${outletPositions.length}`);
+    randomizeOccupiedOutlets();
   }
 
   // 异步 GLB swap:静态 kinds(非 studyTable)
@@ -969,7 +961,10 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
         for (const m of outletMeshGroups[i]) m.material = outletMatOccupied;
       }
     }
-    npcMeshes.forEach(m => scene.remove(m));
+    npcMeshes.forEach(m => {
+      scene.remove(m);
+      disposeProceduralCat(m);
+    });
     npcMeshes.length = 0;
 
     // 非桌 mesh-backed 桩(柱 + 壁插)可被随机占位;桌桩由 greenCount 总数锁定
@@ -991,16 +986,13 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       outletPositions[idx].occupied = true;
       for (const m of outletMeshGroups[idx]) m.material = outletMatOccupied;
       const o = outletPositions[idx];
-      const npc = createSeatedCat(FUR_COLORS[Math.floor(rng() * FUR_COLORS.length)], rng() * Math.PI * 2);
+      const npc = createStandingCat(paletteForFur(FUR_COLORS[Math.floor(rng() * FUR_COLORS.length)]));
       // 桩旁偏前:端板盒/柱电位贴柱面,偏移 0.8(柱半宽 0.45 + 猫半宽 0.3 + margin)避免视觉贴柱
-      npc.position.set(o.x, 0.45, o.z + 0.8);
+      npc.position.set(o.x, 0, o.z + 0.8);
       scene.add(npc);
       npcMeshes.push(npc);
     }
   }
-  // 启动调用一次,确保每局可复现
-  randomizeOccupiedOutlets();
-
   // PR #13 暴露 terrain:静态地形 AABB(书架 + 柱子 + 四人桌),供 minimap 画地形(迷宫感)。
   // 静态数组,rebuildTableZone 不改 studyTable 数量与中心位置 → 引用稳定。readingTable 本 PR 不进 terrain。
   const terrain: LibraryScene['terrain'] = [];
@@ -1026,7 +1018,25 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     player,
     colliders,
     outlets: outletPositions,
+    resetPlayerAnimation,
     update: (dt: number) => {
+      const seatedMotion = { speed: 0, directionX: 0, directionZ: 0, isDashing: false, dt };
+      for (const cat of staticSeatedCats) updateCatAnimation(cat, seatedMotion);
+      for (const cat of tableSeatedCats) updateCatAnimation(cat, seatedMotion);
+
+      const dx = player.position.x - previousPlayerPosition.x;
+      const dz = player.position.z - previousPlayerPosition.z;
+      const distance = Math.hypot(dx, dz);
+      const speed = dt > 0 && distance < 1 ? distance / dt : 0;
+      updateCatAnimation(player, {
+        speed,
+        directionX: dx,
+        directionZ: dz,
+        isDashing: speed > CONFIG.player.walkSpeed * 1.5,
+        dt,
+      });
+      previousPlayerPosition.copy(player.position);
+
       // 电位呼吸脉冲 —— "发光 = 可充电"的视觉语言(空绿 / 占红 同步脉冲)
       t += dt;
       const pulse = 1.1 + 0.6 * Math.sin(t * 3.2);

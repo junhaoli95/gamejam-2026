@@ -4,9 +4,10 @@
 // 颜色按 state:绿=idle(可用) / 橙=wander(闲逛) / 黄=moving(移动) / 红=occupying(已占桩)。
 import * as THREE from 'three';
 import type { NpcEntity } from '../game/npc';
+import { catYawForDirection, updateCatAnimation } from './proceduralCat';
 
-const MESH_Y = 0.45;          // 坐姿猫基座高度(与 randomizeOccupiedOutlets 摆位一致)
-const ARROW_ABOVE_MESH = 1.2; // 头顶 1.2m
+const MESH_Y = 0;             // 移动 NPC 使用站立猫,根节点落地
+const ARROW_ABOVE_MESH = 1.85; // 站立猫耳朵上方
 const ARROW_Y = MESH_Y + ARROW_ABOVE_MESH;
 
 const STATE_COLOR: Record<NpcEntity['state'], number> = {
@@ -42,9 +43,12 @@ function createArrowTexture(): THREE.CanvasTexture {
 
 export function createNpcMeshManager(scene: THREE.Scene, npcMeshes: THREE.Group[]): {
   arrows: THREE.Sprite[];
-  update: (entities: NpcEntity[]) => void;
+  update: (entities: NpcEntity[], dt: number) => void;
+  reset: () => void;
 } {
   const arrows: THREE.Sprite[] = [];
+  const previousPositions = new Map<number, { x: number; z: number }>();
+  const previousMeshes = new Map<number, THREE.Group>();
   const texture = createArrowTexture();
 
   for (const mesh of npcMeshes) {
@@ -60,13 +64,34 @@ export function createNpcMeshManager(scene: THREE.Scene, npcMeshes: THREE.Group[
     arrows.push(sprite);
   }
 
-  function update(entities: NpcEntity[]): void {
+  function update(entities: NpcEntity[], dt: number): void {
+    for (const arrow of arrows) arrow.visible = false;
     for (let i = 0; i < entities.length; i++) {
       const e = entities[i];
       const arrow = arrows[i];
       if (!arrow) continue;
+      arrow.visible = true;
+      const previous = previousPositions.get(e.meshIndex);
+      const dx = previous ? e.x - previous.x : 0;
+      const dz = previous ? e.z - previous.z : 0;
+      const distance = Math.hypot(dx, dz);
+      const speed = dt > 0 && distance < 1 ? distance / dt : 0;
       const mesh = npcMeshes[e.meshIndex];
-      if (mesh) mesh.position.set(e.x, MESH_Y, e.z);
+      const isNewMesh = mesh !== previousMeshes.get(e.meshIndex);
+      const effectiveSpeed = isNewMesh ? 0 : speed;
+      if (mesh) {
+        mesh.position.set(e.x, MESH_Y, e.z);
+        if (effectiveSpeed > 0.05) mesh.rotation.y = catYawForDirection(dx, dz);
+        updateCatAnimation(mesh, {
+          speed: e.state === 'moving' || e.state === 'wander' ? effectiveSpeed : 0,
+          directionX: dx,
+          directionZ: dz,
+          isDashing: false,
+          dt,
+        });
+      }
+      previousPositions.set(e.meshIndex, { x: e.x, z: e.z });
+      if (mesh) previousMeshes.set(e.meshIndex, mesh);
       arrow.position.set(e.x, ARROW_Y, e.z);
       const mat = arrow.material as THREE.SpriteMaterial;
       mat.color.setHex(STATE_COLOR[e.state]);
@@ -74,5 +99,10 @@ export function createNpcMeshManager(scene: THREE.Scene, npcMeshes: THREE.Group[
     }
   }
 
-  return { arrows, update };
+  function reset(): void {
+    previousPositions.clear();
+    previousMeshes.clear();
+  }
+
+  return { arrows, update, reset };
 }
