@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 export interface ShelfDimensions {
   w: number;
@@ -74,69 +75,82 @@ export function createBookLayout(dim: ShelfDimensions, seed = 17): BookPlacement
   return books;
 }
 
-function addBox(
-  group: THREE.Group,
-  name: string,
+export function createDoubleSidedBookLayout(dim: ShelfDimensions, seed = 17): BookPlacement[] {
+  return createBookLayout(dim, seed).flatMap(book => [
+    { ...book, rotationY: -book.rotationY },
+    { ...book, z: -book.z },
+  ]);
+}
+
+function appendBoxGeometry(
+  geometries: THREE.BufferGeometry[],
   size: { x: number; y: number; z: number },
   position: { x: number; y: number; z: number },
-  material: THREE.MeshStandardMaterial,
+  color: number,
   rotationY = 0,
 ): void {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material);
-  mesh.name = name;
-  mesh.position.set(position.x, position.y, position.z);
-  mesh.rotation.y = rotationY;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  group.add(mesh);
+  const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+  geometry.rotateY(rotationY);
+  geometry.translate(position.x, position.y, position.z);
+
+  const vertexColor = new THREE.Color(color);
+  const colors = new Float32Array(geometry.attributes.position.count * 3);
+  for (let i = 0; i < geometry.attributes.position.count; i++) {
+    vertexColor.toArray(colors, i * 3);
+  }
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometries.push(geometry);
 }
 
 export function createProceduralBookshelf(dim: ShelfDimensions, seed = 17): THREE.Group {
   const group = new THREE.Group();
   group.name = 'proceduralBookshelf';
 
-  const wood = new THREE.MeshStandardMaterial({ color: 0xb08c5e, roughness: 0.78, metalness: 0, flatShading: true });
-  const rail = new THREE.MeshStandardMaterial({ color: 0x4a4a45, roughness: 0.72, metalness: 0.12, flatShading: true });
-  const bookMaterials = new Map<number, THREE.MeshStandardMaterial>();
-  const materialForBook = (color: number): THREE.MeshStandardMaterial => {
-    let material = bookMaterials.get(color);
-    if (!material) {
-      material = new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0, flatShading: true });
-      bookMaterials.set(color, material);
-    }
-    return material;
-  };
+  const geometries: THREE.BufferGeometry[] = [];
 
   const postWidth = 0.12;
-  addBox(group, 'leftWoodPost', { x: postWidth, y: dim.h, z: dim.d }, { x: -dim.w / 2 + postWidth / 2, y: dim.h / 2, z: 0 }, wood);
-  addBox(group, 'rightWoodPost', { x: postWidth, y: dim.h, z: dim.d }, { x: dim.w / 2 - postWidth / 2, y: dim.h / 2, z: 0 }, wood);
-  addBox(group, 'topWoodCap', { x: dim.w + 0.04, y: 0.1, z: dim.d + 0.04 }, { x: 0, y: dim.h - 0.05, z: 0 }, wood);
-  addBox(group, 'bottomWoodPlinth', { x: dim.w + 0.04, y: 0.1, z: dim.d + 0.04 }, { x: 0, y: 0.05, z: 0 }, wood);
+  appendBoxGeometry(geometries, { x: postWidth, y: dim.h, z: dim.d }, { x: -dim.w / 2 + postWidth / 2, y: dim.h / 2, z: 0 }, 0xb08c5e);
+  appendBoxGeometry(geometries, { x: postWidth, y: dim.h, z: dim.d }, { x: dim.w / 2 - postWidth / 2, y: dim.h / 2, z: 0 }, 0xb08c5e);
+  appendBoxGeometry(geometries, { x: dim.w + 0.04, y: 0.1, z: dim.d + 0.04 }, { x: 0, y: dim.h - 0.05, z: 0 }, 0xb08c5e);
+  appendBoxGeometry(geometries, { x: dim.w + 0.04, y: 0.1, z: dim.d + 0.04 }, { x: 0, y: 0.05, z: 0 }, 0xb08c5e);
 
   const shelfSurface = 0.12;
   const rowGap = (dim.h - 0.26) / SHELF_COUNT;
   for (let row = 0; row < SHELF_COUNT; row++) {
-    addBox(
-      group,
-      `shelfRail${row}`,
+    appendBoxGeometry(
+      geometries,
       { x: dim.w - postWidth * 2 - 0.04, y: SHELF_THICKNESS, z: dim.d - 0.04 },
       { x: 0, y: shelfSurface + row * rowGap, z: 0 },
-      rail,
+      0x4a4a45,
     );
   }
 
-  for (const [index, book] of createBookLayout(dim, seed).entries()) {
-    for (const side of [-1, 1] as const) {
-      addBox(
-        group,
-        `book${index}${side === -1 ? 'Front' : 'Back'}`,
-        { x: book.w, y: book.h, z: book.d },
-        { x: book.x, y: book.y + book.h / 2, z: book.z * (side === -1 ? 1 : -1) },
-        materialForBook(book.color),
-        book.rotationY * side,
-      );
-    }
+  for (const book of createDoubleSidedBookLayout(dim, seed)) {
+    appendBoxGeometry(
+      geometries,
+      { x: book.w, y: book.h, z: book.d },
+      { x: book.x, y: book.y + book.h / 2, z: book.z },
+      book.color,
+      book.rotationY,
+    );
   }
+
+  let merged: THREE.BufferGeometry | null;
+  try {
+    merged = BufferGeometryUtils.mergeGeometries(geometries, false);
+  } finally {
+    geometries.forEach(geometry => geometry.dispose());
+  }
+  if (!merged) throw new Error('Failed to merge procedural bookshelf geometry');
+
+  const mesh = new THREE.Mesh(
+    merged,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0, flatShading: true }),
+  );
+  mesh.name = 'bookshelfMesh';
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
 
   return group;
 }

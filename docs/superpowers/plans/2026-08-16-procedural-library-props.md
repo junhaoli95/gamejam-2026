@@ -4,7 +4,7 @@
 
 **Goal:** Replace the plain bookshelf placeholder with a lightweight, stylized Three.js bookshelf built from hard-edged geometry and deterministic colored book blocks.
 
-**Architecture:** Keep `loadLibraryScene.ts` responsible for placement, GLB fallback, and colliders. Move the visual construction and deterministic book-layout helper into `src/scene/proceduralLibraryProps.ts`; the existing placeholder call will delegate to that builder. Tests cover the pure book layout and the generated group structure without touching game logic or collision dimensions.
+**Architecture:** Keep `loadLibraryScene.ts` responsible for placement, GLB fallback, and colliders. Move the visual construction and deterministic book-layout helper into `src/scene/proceduralLibraryProps.ts`; the builder merges all frame, shelf, and book box geometry into one vertex-colored Mesh per bookshelf. Tests cover the pure book layout, merged group structure, color attribute, and triangle budget without touching game logic or collision dimensions.
 
 **Tech Stack:** TypeScript, Three.js, Vitest.
 
@@ -28,6 +28,7 @@
 **Interfaces:**
 - Produces `createProceduralBookshelf(dim, seed?) -> THREE.Group` for the scene placeholder.
 - Produces `createBookLayout(dim, seed?) -> BookPlacement[]` for deterministic, bounded book blocks.
+- Produces `createDoubleSidedBookLayout(dim, seed?) -> BookPlacement[]` for mirrored front/back book blocks.
 - Consumes the existing `MODEL_DIMS.bookshelf` shape and the existing placeholder call only.
 
 - [x] **Step 1: Write the failing tests**
@@ -59,13 +60,20 @@ describe('createBookLayout', () => {
 });
 ```
 
-Also add one group-level assertion:
+Also add group-level assertions for a single colored mesh and the triangle budget:
 
 ```ts
-it('builds a visible frame, shelves, and book meshes', () => {
+it('builds the whole bookshelf as one colored mesh', () => {
   const group = createProceduralBookshelf(DIM, 17);
-  expect(group.children.length).toBeGreaterThan(30);
+  const mesh = group.children[0] as THREE.Mesh;
+  const position = mesh.geometry.getAttribute('position');
+  const triangles = mesh.geometry.index ? mesh.geometry.index.count / 3 : position.count / 3;
+
+  expect(group.children).toHaveLength(1);
   expect(group.name).toBe('proceduralBookshelf');
+  expect(mesh).toBeInstanceOf(THREE.Mesh);
+  expect(mesh.geometry.getAttribute('color')).toBeDefined();
+  expect(triangles).toBeLessThan(5000);
 });
 ```
 
@@ -85,10 +93,12 @@ Implement `src/scene/proceduralLibraryProps.ts` with:
 
 - A small seeded RNG local to this scene module.
 - `createBookLayout()` generating 5 rows of varied book widths/heights, with bounded x positions, small deterministic y rotations, and palette colors `0xb08c5e`, `0x6b4a2f`, `0xf0ede6`, `0x9f5546`, `0x4d668f`, `0x73865d`.
-- `createProceduralBookshelf()` creating a `THREE.Group` named `proceduralBookshelf`.
-- Two warm-wood side posts, a top cap, a bottom plinth, no closed back panel, and five charcoal shelf rails with books mirrored onto both faces.
-- One low-sided `BoxGeometry` per book, `MeshStandardMaterial` with `flatShading: true`, matte roughness, and no normal/roughness/metallic texture dependency.
-- `castShadow = true` on visible meshes; no environment-wide outline.
+- `createDoubleSidedBookLayout()` mirroring the same deterministic placements onto front and back faces.
+- `createProceduralBookshelf()` creating a `THREE.Group` named `proceduralBookshelf` with exactly one child Mesh.
+- Two warm-wood side posts, a top cap, a bottom plinth, no closed back panel, and five charcoal shelf rails.
+- Temporary `BoxGeometry` parts with per-vertex colors merged through `BufferGeometryUtils.mergeGeometries()`.
+- One `MeshStandardMaterial` with `vertexColors: true` and `flatShading: true`; no normal/roughness/metallic texture dependency.
+- `castShadow = true` on the merged Mesh; no environment-wide outline.
 
 Use the supplied dimensions and keep all visual geometry centered around x/z with its bottom at y=0. Do not create or modify colliders in this module.
 
