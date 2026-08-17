@@ -737,12 +737,9 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   queryLegendEl.innerHTML =
     `<span class="legend-dot" style="background:#2dff7a"></span>free <span id="q-empty">0</span>` +
     `<span class="sep">·</span>` +
-    `<span class="legend-dot" style="background:#ff4d4d"></span>used <span id="q-occupied">0</span>` +
-    `<span class="sep">·</span>` +
-    `<span class="legend-dot" style="background:#ffd24a"></span>you <span id="q-yours">0</span>`;
+    `<span class="legend-dot" style="background:#ff4d4d"></span>used <span id="q-occupied">0</span>`;
   const qEmptyEl = queryLegendEl.querySelector<HTMLElement>('#q-empty')!;
   const qOccEl   = queryLegendEl.querySelector<HTMLElement>('#q-occupied')!;
-  const qYouEl   = queryLegendEl.querySelector<HTMLElement>('#q-yours')!;
 
   // ── RAF — realtime every-frame read of getSharedState (§10 decision 5) ────
   let rafId = 0;
@@ -774,7 +771,6 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     const occN = state.outlets.length - emptyN;
     qEmptyEl.textContent = String(emptyN);
     qOccEl.textContent = String(occN);
-    qYouEl.textContent = '0'; // player-occupied stub; PR #11 wires to real status
 
     // PR #12 §2.6.5 胜负弹窗 toggle(hidden)-没电(state.won=false && battery<=0)→显 game over,
     // 胜利(state.won=true)→显 win。state.won / battery 都由 getSharedState()[commit 5]
