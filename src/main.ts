@@ -31,7 +31,7 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // --- Scene ---
-const { scene, player, colliders, outlets, update, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
+const { scene, player, colliders, outlets, update, resetPlayerAnimation, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // PR #28:刷新/回访 → 总是显标题屏(除非刚选过关的 reload 用 sessionStorage 一次性跳过);
@@ -157,12 +157,14 @@ mountPhoneHud({
       audio.startBGM(); // PR #16:重开一局,恢复 BGM(若已停)
       playerStats.reset();
       player.position.set(0, 0, 8.5);
+      resetPlayerAnimation();
       // PR #13 #5:新 seed,每局 NPC 占位分布不同(QTE 方案已砍,无 state 需重置)
       // spec 2026-08-15:红桩数 = 布局 meshNpcCount(缺省 CONFIG.npc.count),与 NpcSystem 实体数一致
       randomizeOccupiedOutlets(getLevelNpcCount(), (Date.now() % 100000));
       // PR #16 B:重开新局,NPC 状态重置 + 位置对齐新摆的坐姿猫
       npcController.reset(Date.now() % 100000);
       syncNpcPositionsToMeshes();
+      npcMeshManager.reset();
     }
   },
 });
@@ -287,7 +289,7 @@ function animate() {
     npcOpts.freeMeshGreenCount = outlets.reduce(
       (acc, o) => acc + (!o.occupied && o.kind === 'mesh' ? 1 : 0), 0);
     npcController.update(dt, { playerX: player.position.x, playerZ: player.position.z, losBoxes: toLosBoxes(colliders) });
-    npcMeshManager.update(npcController.entities);
+    npcMeshManager.update(npcController.entities, dt);
     // debug 调试模式:关闭倒计时(battery 锁 10% 不掉) — __debug.noDrain = true 启用
     if (debugNoDrain) runtime.battery = Math.max(runtime.battery, CONFIG.battery.startPercent);
     // §2.5.5 game over 检测:battery=0 且未胜 → gameOver=true
