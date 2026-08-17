@@ -45,11 +45,41 @@ function validate(layout) {
   return null;
 }
 
-function syncConfig(room) {
+function formatNumber(value) {
+  return Number.isInteger(value) ? String(value) : String(Number(value));
+}
+
+function replaceConstNumber(src, name, value) {
+  const re = new RegExp(`(const\\s+${name}\\s*=\\s*)[-+]?\\d+(?:\\.\\d+)?`);
+  return src.replace(re, `$1${formatNumber(value)}`);
+}
+
+function replaceSectionNumber(src, section, field, value) {
+  const sectionRe = new RegExp(`(${section}:\\s*\\{)([\\s\\S]*?)(\\n\\s*\\},)`);
+  return src.replace(sectionRe, (full, open, body, close) => {
+    const fieldRe = new RegExp(`(\\n\\s*${field}:\\s*)[-+]?\\d+(?:\\.\\d+)?`);
+    return open + body.replace(fieldRe, `$1${formatNumber(value)}`) + close;
+  });
+}
+
+function syncConfig(room, tuning = {}) {
   try {
     let src = fs.readFileSync(CONFIG_FILE, 'utf8');
     const before = src;
     src = src.replace(/world:\s*\{\s*w:\s*\d+(?:\.\d+)?\s*,\s*d:\s*\d+(?:\.\d+)?/, `world: { w: ${room.w}, d: ${room.h}`);
+    if (tuning && typeof tuning === 'object') {
+      if (Number.isFinite(tuning.totalGameTimeS)) src = replaceConstNumber(src, 'TOTAL_GAME_TIME_S', tuning.totalGameTimeS);
+      if (Number.isFinite(tuning.startPercent)) src = replaceConstNumber(src, 'START_PERCENT', tuning.startPercent);
+      if (Number.isFinite(tuning.playerWalkSpeed)) src = replaceSectionNumber(src, 'player', 'walkSpeed', tuning.playerWalkSpeed);
+      const npc = tuning.npc || {};
+      for (const field of ['walkSpeed', 'idleMinSec', 'idleMaxSec', 'wanderChance', 'wanderRadius', 'arriveDist']) {
+        if (Number.isFinite(npc[field])) src = replaceSectionNumber(src, 'npc', field, npc[field]);
+      }
+      const appMult = tuning.appMult || {};
+      for (const field of ['MAP', 'RADAR', 'QUERY']) {
+        if (Number.isFinite(appMult[field])) src = replaceSectionNumber(src, 'appMult', field, appMult[field]);
+      }
+    }
     if (src === before) return { changed: false, file: null };
     fs.writeFileSync(CONFIG_FILE, src);
     return { changed: true, file: CONFIG_FILE };
@@ -109,7 +139,7 @@ function historyList() {
 function writeLayout(layout) {
   const backup = backupCurrent();
   fs.writeFileSync(LAYOUT_FILE, JSON.stringify(layout, null, 2));
-  const config = syncConfig(layout.room);
+  const config = syncConfig(layout.room, layout.tuning);
   return { backup, config };
 }
 
@@ -121,7 +151,7 @@ function restoreLayout(file) {
   const layout = JSON.parse(fs.readFileSync(src, 'utf8'));
   const backup = backupCurrent();
   fs.copyFileSync(src, LAYOUT_FILE);
-  const config = syncConfig(layout.room);
+  const config = syncConfig(layout.room, layout.tuning);
   return { backup, config };
 }
 

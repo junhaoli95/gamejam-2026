@@ -225,6 +225,30 @@ main { display: flex; gap: 14px; padding: 58px 14px 14px; align-items: flex-star
       <div id="simInfo">seed 12345 · npc 0 · 绿 0 · 池子需求 0</div>
     </div>
 
+    <div id="tuningBox" class="box">
+      <b>游戏调参(保存到游戏)</b>
+      <div class="row">
+        <label style="width:auto">倒计时</label><input id="tuneTime" type="number" min="30" max="600" step="5" aria-label="游戏倒计时秒数"><span class="unit">秒</span>
+        <label style="width:auto">开局电量</label><input id="tuneStartPct" type="number" min="1" max="100" step="1" aria-label="开局电量百分比"><span class="unit">%</span>
+      </div>
+      <div class="row">
+        <label style="width:auto">玩家速度</label><input id="tunePlayerSpeed" type="number" min="0.5" max="8" step="0.1" aria-label="玩家步行速度"><span class="unit">m/s</span>
+        <label style="width:auto">NPC 速度</label><input id="tuneNpcSpeed" type="number" min="0.5" max="8" step="0.1" aria-label="NPC 步行速度"><span class="unit">m/s</span>
+      </div>
+      <div class="row">
+        <label style="width:auto">NPC 等待</label><input id="tuneIdleMin" type="number" min="0" max="30" step="0.1" aria-label="NPC 最短等待秒数"><span class="unit">~</span><input id="tuneIdleMax" type="number" min="0" max="30" step="0.1" aria-label="NPC 最长等待秒数"><span class="unit">秒</span>
+      </div>
+      <div class="row">
+        <label style="width:auto">闲逛率</label><input id="tuneWander" type="number" min="0" max="1" step="0.05" aria-label="NPC 闲逛概率"><span class="unit">0~1</span>
+        <label style="width:auto">半径</label><input id="tuneWanderRadius" type="number" min="0.5" max="12" step="0.5" aria-label="NPC 闲逛半径"><span class="unit">m</span>
+        <label style="width:auto">到达距离</label><input id="tuneArrive" type="number" min="0.2" max="2" step="0.05" aria-label="NPC 到达距离"><span class="unit">m</span>
+      </div>
+      <div class="row">
+        <label style="width:auto">APP 耗电</label><span class="unit">MAP</span><input id="tuneMapMult" type="number" min="0" max="10" step="0.5" aria-label="MAP 耗电倍率"><span class="unit">RADAR</span><input id="tuneRadarMult" type="number" min="0" max="10" step="0.5" aria-label="RADAR 耗电倍率"><span class="unit">QUERY</span><input id="tuneQueryMult" type="number" min="0" max="10" step="0.5" aria-label="QUERY 耗电倍率">
+      </div>
+      <div style="color:#6b7480">修改后点击“保存到游戏”，Vite HMR 会自动重载。</div>
+    </div>
+
     <div id="histBox" class="box">
       <b>游戏侧历史(服务器)</b>
       <div id="histList">服务器未连接 — 先跑 <code>node tools/save-server.mjs</code></div>
@@ -361,7 +385,55 @@ let seq = 0;
 let selectedEl = null;
 
 let sim = { seed: 12345, meshNpc: 3, greenMin: 1, greenMax: 2, greenMinFloor: 2, fixSeed: false, greenRate: 0.05 };
+const DEFAULT_TUNING = {
+  totalGameTimeS: 180,
+  startPercent: 0.10,
+  playerWalkSpeed: 3.0,
+  npc: { walkSpeed: 3.0, idleMinSec: 0.5, idleMaxSec: 1.5, wanderChance: 0.2, wanderRadius: 4, arriveDist: 0.8 },
+  appMult: { MAP: 2, RADAR: 3, QUERY: 4 },
+};
+let tuning = cloneTuning(DEFAULT_TUNING);
 let defaultRot = 0;  // 默认朝向:0=横,1=竖(对所有可旋转元素生效)
+
+function cloneTuning(t) {
+  return {
+    totalGameTimeS: t.totalGameTimeS,
+    startPercent: t.startPercent,
+    playerWalkSpeed: t.playerWalkSpeed,
+    npc: { ...t.npc },
+    appMult: { ...t.appMult },
+  };
+}
+
+function clampNum(value, min, max, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+}
+
+function normalizeTuning(raw = {}) {
+  const npc = raw.npc || {};
+  const appMult = raw.appMult || {};
+  const idleMinSec = clampNum(npc.idleMinSec, 0, 30, DEFAULT_TUNING.npc.idleMinSec);
+  const idleMaxSec = clampNum(npc.idleMaxSec, idleMinSec, 30, DEFAULT_TUNING.npc.idleMaxSec);
+  return {
+    totalGameTimeS: clampNum(raw.totalGameTimeS, 30, 600, DEFAULT_TUNING.totalGameTimeS),
+    startPercent: clampNum(raw.startPercent, 0.01, 1, DEFAULT_TUNING.startPercent),
+    playerWalkSpeed: clampNum(raw.playerWalkSpeed, 0.5, 8, DEFAULT_TUNING.playerWalkSpeed),
+    npc: {
+      walkSpeed: clampNum(npc.walkSpeed, 0.5, 8, DEFAULT_TUNING.npc.walkSpeed),
+      idleMinSec,
+      idleMaxSec,
+      wanderChance: clampNum(npc.wanderChance, 0, 1, DEFAULT_TUNING.npc.wanderChance),
+      wanderRadius: clampNum(npc.wanderRadius, 0.5, 12, DEFAULT_TUNING.npc.wanderRadius),
+      arriveDist: clampNum(npc.arriveDist, 0.2, 2, DEFAULT_TUNING.npc.arriveDist),
+    },
+    appMult: {
+      MAP: clampNum(appMult.MAP, 0, 10, DEFAULT_TUNING.appMult.MAP),
+      RADAR: clampNum(appMult.RADAR, 0, 10, DEFAULT_TUNING.appMult.RADAR),
+      QUERY: clampNum(appMult.QUERY, 0, 10, DEFAULT_TUNING.appMult.QUERY),
+    },
+  };
+}
 
 let historyStack = [];
 let redoStack = [];
@@ -1053,6 +1125,7 @@ function snapshot() {
     roomW: ROOM_W,
     roomH: ROOM_H,
     sim: { ...sim },
+    tuning: cloneTuning(tuning),
     defaultRot,
     elements: elements.map(e => ({ kind: e.kind, x: e.x, z: e.z, rotY: e.rotY })),
   };
@@ -1080,6 +1153,7 @@ function applyState(s) {
   ROOM_W = s.roomW;
   ROOM_H = s.roomH;
   sim = { ...s.sim };
+  tuning = normalizeTuning(s.tuning);
   if (typeof s.defaultRot === 'number') defaultRot = s.defaultRot;
   else if (typeof s.defaultShelfRot === 'number') defaultRot = s.defaultShelfRot;
   syncRotBtns();
@@ -1093,6 +1167,7 @@ function applyState(s) {
   selectedEl = null;
   for (const e of s.elements) addElement(e.kind, e.x, e.z, e.rotY || 0);
   syncSimInputs();
+  syncTuningInputs();
   updateHint();
   refresh();
 }
@@ -1138,6 +1213,18 @@ const simGreenMin = document.getElementById('simGreenMin');
 const simGreenMax = document.getElementById('simGreenMax');
 const simGreenFloor = document.getElementById('simGreenFloor');
 const simGreenRate = document.getElementById('simGreenRate');
+const tuneTime = document.getElementById('tuneTime');
+const tuneStartPct = document.getElementById('tuneStartPct');
+const tunePlayerSpeed = document.getElementById('tunePlayerSpeed');
+const tuneNpcSpeed = document.getElementById('tuneNpcSpeed');
+const tuneIdleMin = document.getElementById('tuneIdleMin');
+const tuneIdleMax = document.getElementById('tuneIdleMax');
+const tuneWander = document.getElementById('tuneWander');
+const tuneWanderRadius = document.getElementById('tuneWanderRadius');
+const tuneArrive = document.getElementById('tuneArrive');
+const tuneMapMult = document.getElementById('tuneMapMult');
+const tuneRadarMult = document.getElementById('tuneRadarMult');
+const tuneQueryMult = document.getElementById('tuneQueryMult');
 
 function syncSimInputs() {
   simSeedInput.value = sim.seed;
@@ -1147,6 +1234,21 @@ function syncSimInputs() {
   simGreenMax.value = sim.greenMax;
   simGreenFloor.value = sim.greenMinFloor;
   simGreenRate.value = sim.greenRate;
+}
+
+function syncTuningInputs() {
+  tuneTime.value = tuning.totalGameTimeS;
+  tuneStartPct.value = Math.round(tuning.startPercent * 100);
+  tunePlayerSpeed.value = tuning.playerWalkSpeed;
+  tuneNpcSpeed.value = tuning.npc.walkSpeed;
+  tuneIdleMin.value = tuning.npc.idleMinSec;
+  tuneIdleMax.value = tuning.npc.idleMaxSec;
+  tuneWander.value = tuning.npc.wanderChance;
+  tuneWanderRadius.value = tuning.npc.wanderRadius;
+  tuneArrive.value = tuning.npc.arriveDist;
+  tuneMapMult.value = tuning.appMult.MAP;
+  tuneRadarMult.value = tuning.appMult.RADAR;
+  tuneQueryMult.value = tuning.appMult.QUERY;
 }
 
 function simChanged() {
@@ -1169,6 +1271,34 @@ simGreenMin.addEventListener('change', simChanged);
 simGreenMax.addEventListener('change', simChanged);
 simGreenFloor.addEventListener('change', simChanged);
 simGreenRate.addEventListener('change', simChanged);
+function tuningChanged() {
+  tuning.totalGameTimeS = clampNum(tuneTime.value, 30, 600, tuning.totalGameTimeS);
+  tuning.startPercent = clampNum(Number(tuneStartPct.value) / 100, 0.01, 1, tuning.startPercent);
+  tuning.playerWalkSpeed = clampNum(tunePlayerSpeed.value, 0.5, 8, tuning.playerWalkSpeed);
+  tuning.npc.walkSpeed = clampNum(tuneNpcSpeed.value, 0.5, 8, tuning.npc.walkSpeed);
+  tuning.npc.idleMinSec = clampNum(tuneIdleMin.value, 0, 30, tuning.npc.idleMinSec);
+  tuning.npc.idleMaxSec = clampNum(tuneIdleMax.value, tuning.npc.idleMinSec, 30, tuning.npc.idleMaxSec);
+  tuning.npc.wanderChance = clampNum(tuneWander.value, 0, 1, tuning.npc.wanderChance);
+  tuning.npc.wanderRadius = clampNum(tuneWanderRadius.value, 0.5, 12, tuning.npc.wanderRadius);
+  tuning.npc.arriveDist = clampNum(tuneArrive.value, 0.2, 2, tuning.npc.arriveDist);
+  tuning.appMult.MAP = clampNum(tuneMapMult.value, 0, 10, tuning.appMult.MAP);
+  tuning.appMult.RADAR = clampNum(tuneRadarMult.value, 0, 10, tuning.appMult.RADAR);
+  tuning.appMult.QUERY = clampNum(tuneQueryMult.value, 0, 10, tuning.appMult.QUERY);
+  syncTuningInputs();
+  pushHistory(snapshot());
+}
+tuneTime.addEventListener('change', tuningChanged);
+tuneStartPct.addEventListener('change', tuningChanged);
+tunePlayerSpeed.addEventListener('change', tuningChanged);
+tuneNpcSpeed.addEventListener('change', tuningChanged);
+tuneIdleMin.addEventListener('change', tuningChanged);
+tuneIdleMax.addEventListener('change', tuningChanged);
+tuneWander.addEventListener('change', tuningChanged);
+tuneWanderRadius.addEventListener('change', tuningChanged);
+tuneArrive.addEventListener('change', tuningChanged);
+tuneMapMult.addEventListener('change', tuningChanged);
+tuneRadarMult.addEventListener('change', tuningChanged);
+tuneQueryMult.addEventListener('change', tuningChanged);
 document.getElementById('simDice').addEventListener('click', () => {
   simSeedInput.value = Math.floor(Math.random() * 0x7fffffff);
   simChanged();
@@ -1225,6 +1355,7 @@ sizeHInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitSiz
 function buildJson() {
   return {
     room: { w: ROOM_W, h: ROOM_H },
+    tuning: cloneTuning(tuning),
     outlets: {
       meshNpcCount: sim.meshNpc,
       meshGreenRandom: [sim.greenMin, sim.greenMax],
@@ -1293,6 +1424,7 @@ function stateFromJson(j) {
       fixSeed: typeof o.seed === 'number',
       greenRate: typeof o.studyTableGreenRate === 'number' ? o.studyTableGreenRate : sim.greenRate,
     },
+    tuning: normalizeTuning(j.tuning),
     elements: j.placements.map(p => ({
       kind: KIND_BY_NAME[p.kind] || p.kind,
       x: p.x,
@@ -1514,6 +1646,7 @@ async function initLayout() {
     } else {
       loadInitialLayout();
       syncSimInputs();
+      syncTuningInputs();
       updateHint();
       refresh();
       setStatus('已加载初始布局(服务器离线)');
