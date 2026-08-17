@@ -19,8 +19,8 @@ export interface CatMotion {
 export interface CatPose {
   frontLeft: number;
   frontRight: number;
-  rearLeft: number;
-  rearRight: number;
+  armLeft: number;
+  armRight: number;
   bodyBob: number;
   headBob: number;
   tailSway: number;
@@ -35,6 +35,7 @@ export const BROWN_TABBY_PALETTE: CatPalette = {
   eye: 0xb78332,
 };
 
+/** 双足步态:左右腿反相,手臂与同侧腿反相(Minecraft 式摆臂)。 */
 export function computeCatWalkPose(phase: number, isDashing: boolean): CatPose {
   const stride = isDashing ? 0.65 : 0.42;
   const wave = Math.sin(phase + Math.PI / 4) * stride;
@@ -42,8 +43,8 @@ export function computeCatWalkPose(phase: number, isDashing: boolean): CatPose {
   return {
     frontLeft: wave,
     frontRight: -wave,
-    rearLeft: -wave,
-    rearRight: wave,
+    armLeft: -wave,
+    armRight: wave,
     bodyBob: Math.abs(Math.sin(phase * 2)) * (isDashing ? 0.045 : 0.025),
     headBob: Math.sin(phase * 2 + Math.PI) * (isDashing ? 0.02 : 0.012),
     tailSway: Math.sin(phase * 0.7) * (isDashing ? 0.16 : 0.1),
@@ -60,10 +61,10 @@ interface CatRig {
   phase: number;
   body: THREE.Object3D;
   head: THREE.Object3D;
-  frontLeft: THREE.Object3D;
-  frontRight: THREE.Object3D;
-  rearLeft: THREE.Object3D;
-  rearRight: THREE.Object3D;
+  leftLeg: THREE.Object3D;
+  rightLeg: THREE.Object3D;
+  leftArm: THREE.Object3D;
+  rightArm: THREE.Object3D;
   tail: THREE.Object3D;
   leftEar: THREE.Object3D;
   rightEar: THREE.Object3D;
@@ -112,35 +113,36 @@ function createCatParts(palette: CatPalette, seated: boolean): { cat: THREE.Grou
   const stripe = materialFor(palette.stripe);
   const eye = materialFor(palette.eye);
 
+  // ── Q版身体:大头小身 ──
+  const bodyY = seated ? 0.42 : 0.52;
   const body = addMesh(
     cat,
     'body',
-    new THREE.Mesh(new THREE.CapsuleGeometry(seated ? 0.25 : 0.28, seated ? 0.25 : 0.45, 3, 8), fur),
-    [0, seated ? 0.38 : 0.56, seated ? 0.04 : 0.02],
+    new THREE.Mesh(new THREE.CapsuleGeometry(seated ? 0.26 : 0.3, seated ? 0.28 : 0.4, 3, 8), fur),
+    [0, bodyY, seated ? 0.04 : 0],
   );
-  body.scale.set(seated ? 1.05 : 0.98, seated ? 0.9 : 1.05, seated ? 0.95 : 1.28);
+  body.scale.set(seated ? 1.05 : 0.98, seated ? 0.9 : 1.05, seated ? 0.95 : 1.1);
 
-  const bodyStripeYs = seated ? [] : [0.8];
-  for (const [index, y] of bodyStripeYs.entries()) {
+  if (!seated) {
     addMesh(
       body,
-      `bodyStripe${index}`,
-      new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.035, 0.035), stripe),
-      [0, y - (seated ? 0.38 : 0.56), seated ? 0.23 : 0.28],
+      'bodyStripe0',
+      new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.035), stripe),
+      [0, 0.28, 0.3],
     );
   }
 
-  const headY = seated ? 0.72 : 0.94;
-  const headZ = seated ? -0.13 : -0.22;
-  const head = addMesh(cat, 'head', new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), furLight), [0, headY, headZ]);
-  head.scale.set(1.02, 1.02, 1.05);
+  const headY = seated ? 0.9 : 1.05;
+  const headZ = seated ? -0.08 : -0.12;
+  const head = addMesh(cat, 'head', new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), furLight), [0, headY, headZ]);
+  head.scale.set(1.02, 1.04, 1.02);
 
   addMesh(
     head,
     'muzzle',
-    new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), chest),
-    [0, -0.05, -0.25],
-  ).scale.set(1.25, 0.8, 0.75);
+    new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 4), chest),
+    [0, -0.06, -0.32],
+  ).scale.set(1.2, 0.75, 0.7);
 
   let leftEar: THREE.Object3D | undefined;
   let rightEar: THREE.Object3D | undefined;
@@ -148,66 +150,61 @@ function createCatParts(palette: CatPalette, seated: boolean): { cat: THREE.Grou
     const ear = addMesh(
       head,
       side === -1 ? 'leftEar' : 'rightEar',
-      new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.2, 4), fur),
-      [side * 0.14, seated ? 0.22 : 0.21, 0.01],
+      new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.3, 4), fur),
+      [side * 0.2, 0.32, 0.02],
     );
-    ear.rotation.z = -side * 0.12;
+    ear.rotation.z = -side * 0.1;
     if (side === -1) leftEar = ear;
     else rightEar = ear;
 
     addMesh(
       head,
       side === -1 ? 'leftEye' : 'rightEye',
-      new THREE.Mesh(new THREE.SphereGeometry(0.038, 6, 4), eye),
-      [side * 0.095, 0.02, -0.255],
+      new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 4), eye),
+      [side * 0.13, 0.05, -0.33],
     );
   }
 
-  const legPositions: Array<[string, number, number]> = seated
-    ? [
-        ['frontLeftLeg', -0.17, -0.16],
-        ['frontRightLeg', 0.17, -0.16],
-      ]
-    : [
-        ['frontLeftLeg', -0.17, -0.16],
-        ['frontRightLeg', 0.17, -0.16],
-        ['rearLeftLeg', -0.17, 0.2],
-        ['rearRightLeg', 0.17, 0.2],
-      ];
-  const legs: THREE.Object3D[] = [];
-  for (const [name, x, z] of legPositions) {
-    const leg = addMesh(
-      cat,
-      name,
-      new THREE.Mesh(new THREE.CapsuleGeometry(0.085, seated ? 0.18 : 0.28, 2, 6), seated && z > 0 ? furLight : fur),
-      [x, seated ? 0.2 : 0.225, z],
-    );
-    legs.push(leg);
+  // ── 双腿(站立)或坐姿双腿前伸 ──
+  const legZ = seated ? -0.05 : 0;
+  const legY = seated ? 0.16 : 0.2;
+  const leftLeg = addMesh(cat, 'leftLeg', new THREE.Mesh(new THREE.CapsuleGeometry(0.11, seated ? 0.2 : 0.42, 2, 6), fur), [-0.13, legY, legZ]);
+  const rightLeg = addMesh(cat, 'rightLeg', new THREE.Mesh(new THREE.CapsuleGeometry(0.11, seated ? 0.2 : 0.42, 2, 6), fur), [0.13, legY, legZ]);
+
+  // 脚掌(奶油色;坐姿时被身体挡住,省略省 mesh)
+  if (!seated) {
+    addMesh(cat, 'leftFoot', new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), chest), [-0.13, 0.06, 0.06]).scale.set(1, 0.5, 1.4);
+    addMesh(cat, 'rightFoot', new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), chest), [0.13, 0.06, 0.06]).scale.set(1, 0.5, 1.4);
   }
 
-  const chestPatch = addMesh(
+  // ── 两只短手臂(站立时自然下垂,坐姿时放腿前) ──
+  const armY = seated ? 0.34 : 0.42;
+  const armZ = seated ? 0.05 : 0;
+  const leftArm = addMesh(cat, 'leftArm', new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.32, 2, 6), furLight), [-0.27, armY, armZ]);
+  const rightArm = addMesh(cat, 'rightArm', new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.32, 2, 6), furLight), [0.27, armY, armZ]);
+
+  addMesh(
     body,
     'chestPatch',
-    new THREE.Mesh(new THREE.SphereGeometry(0.17, 7, 5), chest),
-    [0, seated ? 0.02 : 0.08, -0.2],
-  );
-  chestPatch.scale.set(0.75, seated ? 1.15 : 1.35, 0.45);
+    new THREE.Mesh(new THREE.SphereGeometry(0.18, 7, 5), chest),
+    [0, 0.06, seated ? -0.18 : -0.22],
+  ).scale.set(0.7, 1.1, 0.45);
 
   const tail = new THREE.Group();
   tail.name = 'tail';
-  tail.position.set(0, seated ? 0.42 : 0.48, seated ? 0.28 : 0.34);
+  tail.position.set(0, seated ? 0.44 : 0.56, seated ? 0.28 : 0.32);
   cat.add(tail);
-  const tailSegment = addMesh(tail, 'tailSegment', new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.38, 2, 6), fur), [0, 0.13, 0]);
-  tailSegment.rotation.x = seated ? -0.5 : -0.8;
+  const tailSegment = addMesh(tail, 'tailSegment', new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.42, 2, 6), fur), [0, 0.14, 0]);
+  tailSegment.rotation.x = seated ? -0.5 : -0.7;
 
   const rig: CatRig = {
     phase: 0,
     body,
     head,
-    frontLeft: legs[0],
-    frontRight: legs[1],
-    rearLeft: legs[2] ?? legs[0],
-    rearRight: legs[3] ?? legs[1],
+    leftLeg,
+    rightLeg,
+    leftArm,
+    rightArm,
     tail,
     leftEar: leftEar!,
     rightEar: rightEar!,
@@ -240,16 +237,19 @@ export function updateCatAnimation(cat: THREE.Group, motion: CatMotion): void {
 
   const pose = computeCatWalkPose(rig.phase, motion.isDashing);
   const legScale = moving ? 1 : 0;
-  rig.frontLeft.rotation.x = pose.frontLeft * legScale;
-  rig.frontRight.rotation.x = pose.frontRight * legScale;
-  rig.rearLeft.rotation.x = pose.rearLeft * legScale;
-  rig.rearRight.rotation.x = pose.rearRight * legScale;
+
+  rig.leftLeg.rotation.x = pose.frontLeft * legScale;
+  rig.rightLeg.rotation.x = pose.frontRight * legScale;
+  rig.leftArm.rotation.x = pose.armLeft * legScale;
+  rig.rightArm.rotation.x = pose.armRight * legScale;
+
   rig.body.position.y = rig.baseBodyY + pose.bodyBob * (moving ? 1 : 0.65);
   rig.head.position.y = rig.baseHeadY + pose.headBob * (moving ? 1 : 0.65);
   rig.body.rotation.x = moving ? -pose.lean : 0;
   rig.head.rotation.x = moving ? pose.lean * 0.5 : 0;
   rig.tail.rotation.z = pose.tailSway;
   rig.tail.rotation.x = motion.isDashing ? 0.25 : 0;
+
   const twitch = Math.sin(rig.phase * 0.37) > 0.96 ? 0.08 : 0;
   rig.leftEar.rotation.z = rig.baseLeftEarZ + twitch;
   rig.rightEar.rotation.z = rig.baseRightEarZ - twitch;

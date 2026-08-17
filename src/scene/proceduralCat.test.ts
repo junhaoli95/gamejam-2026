@@ -10,12 +10,18 @@ import {
 } from './proceduralCat';
 
 describe('computeCatWalkPose', () => {
-  it('uses opposite phases for diagonal leg pairs', () => {
+  it('swings bipedal legs opposite to each other', () => {
     const pose = computeCatWalkPose(0, false);
 
-    expect(pose.frontLeft).toBeCloseTo(pose.rearRight);
-    expect(pose.frontRight).toBeCloseTo(pose.rearLeft);
-    expect(pose.frontLeft).not.toBeCloseTo(pose.frontRight);
+    expect(pose.frontLeft).toBeCloseTo(-pose.frontRight);
+    expect(pose.frontLeft).not.toBeCloseTo(0);
+  });
+
+  it('swings each arm opposite to its same-side leg', () => {
+    const pose = computeCatWalkPose(0, false);
+
+    expect(pose.armLeft).toBeCloseTo(-pose.frontLeft);
+    expect(pose.armRight).toBeCloseTo(-pose.frontRight);
   });
 
   it('increases stride and body lean during dash', () => {
@@ -34,16 +40,18 @@ describe('computeCatWalkPose', () => {
 });
 
 describe('procedural cat geometry', () => {
-  it('creates a grounded standing cat with animated parts', () => {
+  it('creates a grounded chibi bipedal standing cat', () => {
     const cat = createStandingCat(BROWN_TABBY_PALETTE);
     let meshCount = 0;
     cat.traverse(object => { if (object instanceof THREE.Mesh) meshCount++; });
 
     expect(cat.name).toBe('proceduralStandingCat');
     expect(cat.getObjectByName('body')).toBeInstanceOf(THREE.Mesh);
-    expect(cat.getObjectByName('frontLeftLeg')).toBeInstanceOf(THREE.Object3D);
+    expect(cat.getObjectByName('leftLeg')).toBeInstanceOf(THREE.Object3D);
+    expect(cat.getObjectByName('leftArm')).toBeInstanceOf(THREE.Object3D);
+    expect(cat.getObjectByName('rightLeg')).toBeInstanceOf(THREE.Object3D);
     expect(cat.getObjectByName('tail')).toBeInstanceOf(THREE.Object3D);
-    expect(meshCount).toBeLessThanOrEqual(15);
+    expect(meshCount).toBeLessThanOrEqual(16);
   });
 
   it('keeps seated cats as a separate pose', () => {
@@ -58,7 +66,7 @@ describe('procedural cat geometry', () => {
 
   it('animates child limbs without moving the gameplay root', () => {
     const cat = createStandingCat(BROWN_TABBY_PALETTE);
-    const leg = cat.getObjectByName('frontLeftLeg')!;
+    const leg = cat.getObjectByName('leftLeg')!;
     const rootBefore = cat.position.clone();
     const before = leg.rotation.x;
 

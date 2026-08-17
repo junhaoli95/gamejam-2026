@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace placeholder cats with a low-poly brown tabby procedural cat and add simple code-driven idle, walk, and dash animation for the player and moving NPCs.
+**Goal:** Replace placeholder cats with a Q版 chibi bipedal brown tabby procedural cat and add simple code-driven idle, walk, and dash animation for the player and moving NPCs.
 
 **Architecture:** Keep all cat geometry, pure pose math, and animation in `src/scene/proceduralCat.ts`. The module exposes normal `THREE.Group` values and stores rig references in a `WeakMap`; it does not read game state or DOM. `loadLibraryScene.ts` owns player and seated-cat creation, while `npcMesh.ts` derives NPC motion from entity position deltas and drives standing-cat animation. `game/` state, movement, collision, and NPC pathfinding remain unchanged.
 
@@ -105,9 +105,9 @@ Implement `proceduralCat.ts` with:
 
 - `BROWN_TABBY_PALETTE` using the locked colors from the spec.
 - Cached `MeshStandardMaterial` instances per palette/color.
-- Standing body, head, muzzle, ears, four legs, four paws, and a segmented tail.
-- Chest/muzzle/paw color blocks and 2-3 dark tabby stripe meshes or bands; no fur texture.
-- Seated body/legs/tail pose for table cats.
+- Standing chibi body, large head, muzzle, ears, two legs, two short arms, and a segmented tail.
+- Chest/muzzle/paw color blocks and dark tabby stripe bands; no fur texture.
+- Seated body/legs/arms/tail pose for table cats.
 - `castShadow = true` on visible parts and `receiveShadow = true` on body/legs.
 
 Use a standing height near `1.2m`, a body width near `0.55m`, and a root bottom at `y=0`.
