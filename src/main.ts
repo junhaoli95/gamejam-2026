@@ -214,7 +214,7 @@ function syncNpcPositionsToMeshes(): void {
   const npcN = getLevelNpcCount();
   const safetyMargin = (outlets.length) - occupiedStart - npcN;
   if (safetyMargin < 1) {
-    console.warn(`[layout] 配置警告:总桩 ${outlets.length} - 初始预占 ${occupiedStart} - NPC ${npcN} = ${safetyMargin} < 1,玩家可能无桩可充。请降低 NPC 数或 studyTableGreenRate。`);
+    console.warn(`[layout] config warning: total outlets ${outlets.length} - initial occupied ${occupiedStart} - NPC ${npcN} = ${safetyMargin} < 1, player may have no outlet to charge. Lower NPC count or studyTableGreenRate.`);
   }
 }
   npcController.resolveAll();  // PR #16 fix:初始嵌柱推出

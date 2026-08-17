@@ -447,7 +447,7 @@ function drawRadar(
 
   // bottom reading: "Xm · COMPASS"
   const COMPASS_8 = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
-  let reading = '雷达无信号';
+  let reading = 'NO SIGNAL';
   if (nearest !== null) {
     // angle ∈ [-π, π]; normalize to [0, 2π); bucket into 8 octants.
     const norm = ((nearest.angle + Math.PI * 2) % (Math.PI * 2));
@@ -465,7 +465,7 @@ function drawRadar(
   const occN = state.outlets.filter((o) => o.occupied).length;
   ctx.font = '10px ui-monospace, monospace';
   ctx.fillStyle = 'rgba(220,220,220,0.6)';
-  ctx.fillText(`${emptyN} 空 / ${occN} 占`, W / 2, H - 4);
+  ctx.fillText(`${emptyN} free / ${occN} used`, W / 2, H - 4);
 }
 
 // build SVG progress ring markup string for a single app icon.
@@ -735,11 +735,11 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
 
   // ── legend (QUERY) ─────────────────────────────────────────────────────────
   queryLegendEl.innerHTML =
-    `<span class="legend-dot" style="background:#2dff7a"></span>空 <span id="q-empty">0</span>` +
+    `<span class="legend-dot" style="background:#2dff7a"></span>free <span id="q-empty">0</span>` +
     `<span class="sep">·</span>` +
-    `<span class="legend-dot" style="background:#ff4d4d"></span>占 <span id="q-occupied">0</span>` +
+    `<span class="legend-dot" style="background:#ff4d4d"></span>used <span id="q-occupied">0</span>` +
     `<span class="sep">·</span>` +
-    `<span class="legend-dot" style="background:#ffd24a"></span>你 <span id="q-yours">0</span>`;
+    `<span class="legend-dot" style="background:#ffd24a"></span>you <span id="q-yours">0</span>`;
   const qEmptyEl = queryLegendEl.querySelector<HTMLElement>('#q-empty')!;
   const qOccEl   = queryLegendEl.querySelector<HTMLElement>('#q-occupied')!;
   const qYouEl   = queryLegendEl.querySelector<HTMLElement>('#q-yours')!;

@@ -27,9 +27,9 @@ const FRAME_SKIP = 2;
 // Static zone label anchors in world coords (master §6.1):
 //   west (x<-4) = bookshelves, east (x>0) = study tables, mid = corridor.
 const ZONE_LABELS: Array<{ x: number; z: number; text: string }> = [
-  { x: -8, z: -4, text: '书架区' },
-  { x: 8, z: -4, text: '自习区' },
-  { x: 0, z: 5, text: '走廊' },
+  { x: -8, z: -4, text: 'STACKS' },
+  { x: 8, z: -4, text: 'STUDY' },
+  { x: 0, z: 5, text: 'AISLE' },
 ];
 
 export interface MinimapBlipInput {
