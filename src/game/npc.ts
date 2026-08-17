@@ -60,6 +60,9 @@ export interface NpcControllerOptions {
   /** PR #27 门控(2026-08-15):场上非自习桌绿桩数。≤1 时 NPC idle 不再抢桩(给玩家留最后 1 充点)。
    *  缺省 = Infinity → 门控不触发(旧测试/无布局 harness 兼容)。main.ts 每帧更新该字段。 */
   freeMeshGreenCount?: number;
+  /** 场地边界(房间宽深),NPC 移动后 clamp 防穿墙(玩家靠 controller bounds,NPC 需另加)。
+   *  缺省 = 不 clamp(旧测试兼容)。main.ts 传 { w: CONFIG.world.w, d: CONFIG.world.d }。 */
+  bounds?: { w: number; d: number };
 }
 
 export interface NpcController {
@@ -92,19 +95,27 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
   /** 移动后碰撞推出:检测 NPC 圆是否陷入某 AABB,沿嵌入最浅的轴推出到贴面(与 player resolveAxis 同规则)。 */
   function resolveCollision(e: NpcEntity): void {
     const cols = opts.colliders;
-    if (!cols || cols.length === 0) return;
-    for (const b of cols) {
-      const insideX = e.x > b.minX - NPC_RADIUS && e.x < b.maxX + NPC_RADIUS;
-      const insideZ = e.z > b.minZ - NPC_RADIUS && e.z < b.maxZ + NPC_RADIUS;
-      if (!insideX || !insideZ) continue;
-      // 算两个轴各自的嵌入深度,推嵌入浅的轴(最小推出,避免误推)
-      const overlapX = Math.min(e.x - (b.minX - NPC_RADIUS), (b.maxX + NPC_RADIUS) - e.x);
-      const overlapZ = Math.min(e.z - (b.minZ - NPC_RADIUS), (b.maxZ + NPC_RADIUS) - e.z);
-      if (overlapX <= overlapZ) {
-        e.x = e.x < (b.minX + b.maxX) / 2 ? b.minX - NPC_RADIUS : b.maxX + NPC_RADIUS;
-      } else {
-        e.z = e.z < (b.minZ + b.maxZ) / 2 ? b.minZ - NPC_RADIUS : b.maxZ + NPC_RADIUS;
+    if (cols) {
+      for (const b of cols) {
+        const insideX = e.x > b.minX - NPC_RADIUS && e.x < b.maxX + NPC_RADIUS;
+        const insideZ = e.z > b.minZ - NPC_RADIUS && e.z < b.maxZ + NPC_RADIUS;
+        if (!insideX || !insideZ) continue;
+        // 算两个轴各自的嵌入深度,推嵌入浅的轴(最小推出,避免误推)
+        const overlapX = Math.min(e.x - (b.minX - NPC_RADIUS), (b.maxX + NPC_RADIUS) - e.x);
+        const overlapZ = Math.min(e.z - (b.minZ - NPC_RADIUS), (b.maxZ + NPC_RADIUS) - e.z);
+        if (overlapX <= overlapZ) {
+          e.x = e.x < (b.minX + b.maxX) / 2 ? b.minX - NPC_RADIUS : b.maxX + NPC_RADIUS;
+        } else {
+          e.z = e.z < (b.minZ + b.maxZ) / 2 ? b.minZ - NPC_RADIUS : b.maxZ + NPC_RADIUS;
+        }
       }
+    }
+    // 场地边界 clamp(墙不在 colliders 里,玩家靠 controller bounds,NPC 需另加)
+    if (opts.bounds) {
+      const hw = opts.bounds.w / 2 - NPC_RADIUS;
+      const hd = opts.bounds.d / 2 - NPC_RADIUS;
+      e.x = Math.min(hw, Math.max(-hw, e.x));
+      e.z = Math.min(hd, Math.max(-hd, e.z));
     }
   }
 
