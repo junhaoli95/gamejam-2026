@@ -437,6 +437,34 @@ describe('NPC 抢桩门控(非自习桌绿桩 ≤1 时拒绝 idle→moving,2026-
     expect(e.targetOutletIndex).toBe(0);
   });
 
+  it('在途 reservation 也计入保底 → 两根绿桩只允许一个 NPC 出发', () => {
+    const occupied = [false, false];
+    const controller = createNpcController({
+      getOutletCount: () => occupied.length,
+      getOutletPos: (i) => ({ x: (i + 1) * 10, z: 0 }),
+      isOutletOccupied: (i) => occupied[i],
+      setOutletOccupied: (i, occ) => { occupied[i] = occ; },
+      isOutletMesh: () => true,
+      npcCount: 2,
+      cfg,
+      freeMeshGreenCount: 2,
+    });
+    const [first, second] = controller.entities;
+
+    controller.update(0.15);
+    expect(first.state).toBe('moving');
+    expect(first.targetOutletIndex).toBe(0);
+    expect(second.state).toBe('idle');
+    expect(second.targetOutletIndex).toBe(-1);
+
+    // 第一只占桩后,场上只剩 1 根绿桩;第二只仍不能出发。
+    controller.update(10);
+    controller.update(0.01);
+    expect(first.state).toBe('occupying');
+    expect(occupied).toEqual([true, false]);
+    expect(second.state).toBe('idle');
+  });
+
   it('缺省(未传 freeMeshGreenCount)→ 门控不触发,兼容旧 harness', () => {
     const { controller } = makeHarness([{ x: 5, z: 0 }]);
     const e = controller.entities[0];

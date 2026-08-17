@@ -55,6 +55,8 @@ export interface NpcControllerOptions {
   colliders?: Array<{ minX: number; minZ: number; maxX: number; maxZ: number }>;
   /** PR #17 A:桩是否可被 NPC 占用(壁插常亮不可占;缺省 = 全部可占,兼容旧测试) */
   isOutletOccupiable?: (i: number) => boolean;
+  /** 判断桩是否属于非自习桌 mesh 桩;用于保留最后 1 根绿桩时扣除 NPC 预定。 */
+  isOutletMesh?: (i: number) => boolean;
   /** PR #17 B:A* 寻路网格(缺省 = 直线走,兼容旧测试)。rebuild 后须由调用方更新。 */
   grid?: Grid;
   /** PR #27 门控(2026-08-15):场上非自习桌绿桩数。≤1 时 NPC idle 不再抢桩(给玩家留最后 1 充点)。
@@ -151,6 +153,30 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
     return best;
   }
 
+  /** 当前仍可用的非自习桌绿桩数;有分类回调时直接读实时 occupied,避免同帧滞后。 */
+  function countFreeMeshOutlets(): number {
+    if (!opts.isOutletMesh) return opts.freeMeshGreenCount ?? Infinity;
+    let count = 0;
+    for (let i = 0; i < opts.getOutletCount(); i++) {
+      if (opts.isOutletMesh(i) && !opts.isOutletOccupied(i)) count++;
+    }
+    return count;
+  }
+
+  /** 预定表中属于 mesh 的数量;桌面桩 reservation 不应消耗“最后 1 根 mesh 绿桩”保底。 */
+  function countReservedMeshOutlets(): number {
+    let count = 0;
+    for (const outletIndex of reservedOutletBy.keys()) {
+      if (!opts.isOutletMesh || opts.isOutletMesh(outletIndex)) count++;
+    }
+    return count;
+  }
+
+  /** 预定新桩后仍必须至少留 1 根 mesh 绿桩给玩家。 */
+  function canReserveOutlet(): boolean {
+    return countFreeMeshOutlets() - countReservedMeshOutlets() > 1;
+  }
+
   /** 清除实体当前目标及其预定,用于目标被抢/重置/重新选桩。 */
   function releaseOutletReservation(e: NpcEntity): void {
     if (e.targetOutletIndex >= 0 && reservedOutletBy.get(e.targetOutletIndex) === e.meshIndex) {
@@ -201,6 +227,7 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
   function pickReachableOutlet(e: NpcEntity, exclude = -1): number {
     // 重新选桩前先释放旧目标,避免旧 reservation 泄漏。
     releaseOutletReservation(e);
+    if (!canReserveOutlet()) return -1;
     let t = pickNearestFreeOutlet(e.x, e.z, exclude, e.meshIndex);
     let excluded = exclude;
     while (t >= 0) {
@@ -280,17 +307,13 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
           if (goWander) {
             e.state = 'wander';
           } else {
-            // ★ 抢桩门控(2026-08-15):场上非自习桌绿桩 ≤ 1 → 拒绝 idle→moving(不抢最后 1 充点)。
-            // wander 不受门控(wander 不抢桩);已占用(moving 完成)的桩不撤 —— 只挡新抢。
-            if ((opts.freeMeshGreenCount ?? Infinity) <= 1) {
-              e.idleTimer = newIdleTimer();  // 等下一轮再掷骰
+            // ★ 抢桩门控:pickReachableOutlet 同时检查实时绿桩和在途 reservation,
+            // 保证首次抢桩/中途改抢都不会吃掉最后 1 根充点。
+            const t = pickReachableOutlet(e);
+            if (t >= 0) {
+              e.state = 'moving';
             } else {
-              const t = pickReachableOutlet(e);
-              if (t >= 0) {
-                e.state = 'moving';
-              } else {
-                e.idleTimer = newIdleTimer();  // 全占/全不可达,再等一轮
-              }
+              e.idleTimer = newIdleTimer();  // 保底容量不足/全占/全不可达,再等一轮
             }
           }
         }
