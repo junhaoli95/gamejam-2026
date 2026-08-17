@@ -185,9 +185,25 @@ export function mountTitleScreen(opts: TitleScreenOptions): void {
   stage2.appendChild(back);
   root.appendChild(stage2);
 
-  startBtn.addEventListener('click', () => {
+  startBtn.addEventListener('click', gotoStage2);
+
+  // 空格/回车 = 默认按钮:Stage 1 → 进选关;Stage 2 → 选已高亮关卡(默认 Library)
+  function onTitleKey(e: KeyboardEvent): void {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    e.preventDefault();
+    if (stage2.classList.contains('visible')) {
+      // 选关阶段:触发当前高亮关卡点击
+      const selectedCard = grid.querySelector<HTMLElement>('.title-level-card.selected') ?? grid.querySelector<HTMLElement>('.title-level-card:not(.locked)');
+      selectedCard?.click();
+    } else {
+      gotoStage2();
+    }
+  }
+  window.addEventListener('keydown', onTitleKey);
+
+  function gotoStage2(): void {
     stage2.classList.add('visible');
-  });
+  }
 
   document.body.appendChild(root);
 }

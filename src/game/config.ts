@@ -1,12 +1,12 @@
 // PR #13 #2:起始电量 10%(1% 电主题)+ 方案 B —— baseDrain 跟 startPercent 缩放,
 // 让 10% 仍玩满 totalGameTimeS(180s),百分比只是显示数字。playtest 调 START_PERCENT。
-const START_PERCENT = 0.10;
-const TOTAL_GAME_TIME_S = 180;
+const START_PERCENT = 0.1;
+const TOTAL_GAME_TIME_S = 60;
 
 export const CONFIG = {
-  world: { w: 32, d: 24, cellSize: 0.4 },
+  world: { w: 80, d: 72, cellSize: 0.4 },
   player: {
-    walkSpeed: 3.0,
+    walkSpeed: 3,
     sprintSpeed: 5.6,
     radius: 0.32,
     turnLerp: 14,
@@ -38,14 +38,14 @@ export const CONFIG = {
     baseDrain: START_PERCENT / TOTAL_GAME_TIME_S,  // 方案 B:满电续航 = totalGameTimeS 不变(spec §4.1 / §10.1)
     totalGameTimeS: TOTAL_GAME_TIME_S,
     appMult: {
-      RADAR: 3,
-      MAP: 2,
-      QUERY: 4,
+      RADAR: 1.2,
+      MAP: 6,
+      QUERY: 10,
     },
   },
   npc: {
     count: 3,
-    walkSpeed: 3.0,        // 与玩家 walkSpeed 完全一致
+    walkSpeed: 4,        // 与玩家 walkSpeed 完全一致
     idleMinSec: 0.5,
     idleMaxSec: 1.5,
     arriveDist: 0.8,       // 到桩 0.8m 内 = occupying

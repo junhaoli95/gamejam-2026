@@ -1,6 +1,6 @@
 // PR #16 §4.1:WebAudio 程序化合成,零音频素材文件。
 // 懒初始化 AudioContext(首次用户点击 overlay 后 resume,满足浏览器 autoplay policy)。
-// BGM:4 拍循环,C minor,fm synth pad + walking bass(setInterval 调度)。
+// BGM:低音量、慢速和弦渐变的温和 library pad,不使用刺耳的 FM/walking bass。
 export interface AudioApi {
   playWin: () => void;
   playLose: () => void;
@@ -10,11 +10,16 @@ export interface AudioApi {
   stopBGM: () => void;
 }
 
-// C minor walking bass:C2-Eb2-G2-F2 循环(每音 0.5s,2s 一个 bar)
-const BASS_NOTES = [65.41, 77.78, 98.0, 87.31];
+// 温和的 C major7 → Am7 → F major7 → G6 和弦,每 4 秒平滑换一次。
+const PAD_CHORDS = [
+  [261.63, 329.63, 392.00, 493.88],
+  [220.00, 261.63, 329.63, 392.00],
+  [174.61, 220.00, 261.63, 329.63],
+  [196.00, 246.94, 293.66, 392.00],
+];
+const PAD_CHORD_SEC = 4;
 // win 上升音阶 C5-E5-G5-C6(每音 80ms)
 const WIN_NOTES = [523.25, 659.26, 783.99, 1046.5];
-const BASS_STEP_SEC = 0.5;
 
 interface ToneOpts {
   freq: number;
@@ -30,7 +35,7 @@ export function mountAudio(): AudioApi {
   let master: GainNode | null = null;
   let padOscs: OscillatorNode[] = [];
   let padGain: GainNode | null = null;
-  let bassTimer: number | null = null;
+  let chordTimer: number | null = null;
   let lowTimer: number | null = null;
   let bgmOn = false;
 
@@ -64,59 +69,51 @@ export function mountAudio(): AudioApi {
     osc.stop(o.start + o.dur + 0.05);
   }
 
-  // --- BGM:fm synth pad(C3 sawtooth 被 C2 mod osc 调制 + Eb3 定和弦)+ walking bass ---
+  // --- BGM:温和的低通和弦 Pad,适合图书馆环境 ---
   function startBGM(): void {
     const c = ensureCtx();
     if (bgmOn) return;
     bgmOn = true;
 
-    // pad:载波 C3 sawtooth
-    const carrier = c.createOscillator();
-    carrier.type = 'sawtooth';
-    carrier.frequency.value = 130.81;
-    const mod = c.createOscillator();
-    mod.frequency.value = 65.41; // C2 调制
-    const modGain = c.createGain();
-    modGain.gain.value = 24; // fm depth
-    mod.connect(modGain).connect(carrier.frequency);
-    // 叠 Eb3 sine 定 C minor 和弦
-    const fifth = c.createOscillator();
-    fifth.type = 'sine';
-    fifth.frequency.value = 155.56;
-    const mix = c.createGain();
-    mix.gain.value = 0.4;
-    carrier.connect(mix);
-    fifth.connect(mix);
-    // GainNode 主控 + LFO(2s 周期)调音量
+    // 纯净 sine/triangle 叠层 + 低通，避免 sawtooth/FM 带来的高频尖锐感。
+    const filter = c.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1200;
+    filter.Q.value = 0.25;
     padGain = c.createGain();
-    padGain.gain.value = 0.07;
-    const lfo = c.createOscillator();
-    lfo.frequency.value = 0.5;
-    const lfoDepth = c.createGain();
-    lfoDepth.gain.value = 0.045;
-    lfo.connect(lfoDepth).connect(padGain.gain);
-    mix.connect(padGain).connect(master ?? c.destination);
-    padOscs = [carrier, mod, fifth, lfo];
-    carrier.start();
-    mod.start();
-    fifth.start();
-    lfo.start();
+    padGain.gain.value = 0.045;
+    padGain.connect(filter).connect(master ?? c.destination);
 
-    // walking bass:每 0.5s 一个 8 分音符,setInterval 调度(currentTime 精确落音)
-    bassTimer = window.setInterval(() => {
+    const firstChord = PAD_CHORDS[0];
+    padOscs = firstChord.map((freq, i) => {
+      const osc = c.createOscillator();
+      osc.type = i === 0 ? 'triangle' : 'sine';
+      osc.frequency.value = freq;
+      osc.detune.value = i === 3 ? 2 : 0;
+      osc.connect(padGain!);
+      osc.start();
+      return osc;
+    });
+
+    let chordIndex = 0;
+    chordTimer = window.setInterval(() => {
       if (!bgmOn || !ctx) return;
+      chordIndex = (chordIndex + 1) % PAD_CHORDS.length;
       const now = ctx.currentTime;
-      BASS_NOTES.forEach((f, i) => {
-        tone({ freq: f, type: 'triangle', start: now + i * BASS_STEP_SEC, dur: 0.35, gain: 0.14 });
+      PAD_CHORDS[chordIndex].forEach((freq, i) => {
+        const osc = padOscs[i];
+        if (!osc) return;
+        osc.frequency.cancelScheduledValues(now);
+        osc.frequency.setTargetAtTime(freq, now, 1.35);
       });
-    }, BASS_STEP_SEC * BASS_NOTES.length);
+    }, PAD_CHORD_SEC * 1000);
   }
 
   function stopBGM(): void {
     bgmOn = false;
-    if (bassTimer !== null) {
-      clearInterval(bassTimer);
-      bassTimer = null;
+    if (chordTimer !== null) {
+      clearInterval(chordTimer);
+      chordTimer = null;
     }
     if (lowTimer !== null) {
       clearInterval(lowTimer);
