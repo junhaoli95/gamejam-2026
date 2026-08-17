@@ -356,6 +356,101 @@ function buildShelfPlaceholder(dim: { w: number; h: number; d: number }): THREE.
   return createProceduralBookshelf(dim, 17);
 }
 
+/** 程序化简易天花板:浅色底板 + 下沉装饰梁 + 矩形吸顶灯。 */
+function buildCeiling(roomW: number, roomH: number, wallH: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'ceilingGroup';
+
+  const ceilingMat = new THREE.MeshStandardMaterial({
+    color: 0xf0ede4,
+    roughness: 0.9,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: 0xd7d1c4,
+    roughness: 0.82,
+    metalness: 0,
+  });
+  const fixtureFrameMat = new THREE.MeshStandardMaterial({
+    color: 0x8b8982,
+    roughness: 0.45,
+    metalness: 0.2,
+  });
+  const diffuserMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xfff8e8,
+    emissiveIntensity: 1.2,
+    roughness: 0.3,
+    metalness: 0,
+  });
+
+  // 顶面厚度只用于遮住底板边缘;顶部仍与墙高齐平,不会改变房间尺度。
+  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(roomW, 0.08, roomH), ceilingMat);
+  ceiling.name = 'ceilingBase';
+  ceiling.position.y = wallH - 0.04;
+  ceiling.receiveShadow = true;
+  group.add(ceiling);
+
+  // 参考图的平整白顶只保留很浅的分格阴影,所有装饰都向下沉,不向墙顶上凸。
+  const trimHeight = 0.14;
+  const trimY = wallH - 0.08 - trimHeight / 2;
+  const edgeInset = 0.28;
+  const longTrim = new THREE.BoxGeometry(Math.max(0.5, roomW - edgeInset * 2), trimHeight, 0.08);
+  const shortTrim = new THREE.BoxGeometry(0.08, trimHeight, Math.max(0.5, roomH - edgeInset * 2));
+  for (const z of [-roomH / 2 + edgeInset, roomH / 2 - edgeInset, 0]) {
+    const beam = new THREE.Mesh(longTrim, trimMat);
+    beam.position.set(0, trimY, z);
+    group.add(beam);
+  }
+  // 两条内梁放在灯具列之间,不穿过中间灯具。
+  for (const x of [-roomW / 6, roomW / 6]) {
+    const beam = new THREE.Mesh(shortTrim, trimMat);
+    beam.position.set(x, trimY, 0);
+    group.add(beam);
+  }
+
+  const fixtureWidth = Math.min(2.9, roomW / 5);
+  const fixtureDepth = Math.min(1.15, roomH / 6);
+  const fixtureFrameGeo = new THREE.BoxGeometry(fixtureWidth, 0.08, fixtureDepth);
+  const diffuserGeo = new THREE.BoxGeometry(fixtureWidth * 0.88, 0.035, fixtureDepth * 0.7);
+  const fixtureY = wallH - 0.22;
+  const diffuserY = fixtureY - 0.0575;
+  const xOffsets = [-roomW / 3, 0, roomW / 3];
+  const zOffsets = [-roomH / 4, roomH / 4];
+  const ceilingLightPositions: Array<[number, number]> = [];
+
+  for (const z of zOffsets) {
+    for (const x of xOffsets) {
+      const frame = new THREE.Mesh(fixtureFrameGeo, fixtureFrameMat);
+      frame.name = 'ceilingLightFrame';
+      frame.position.set(x, fixtureY, z);
+      frame.castShadow = true;
+      group.add(frame);
+
+      const diffuser = new THREE.Mesh(diffuserGeo, diffuserMat);
+      diffuser.name = 'ceilingLightDiffuser';
+      diffuser.position.set(x, diffuserY, z);
+      group.add(diffuser);
+      ceilingLightPositions.push([x, z]);
+    }
+  }
+
+  // 6 盏灯只用 4 个真实点光源,其余由 emissive 面表现;总 active point light ≤ 7。
+  const lightPositions = [0, 2, 3, 5];
+  for (const index of lightPositions) {
+    const [x, z] = ceilingLightPositions[index];
+    const pointLight = new THREE.PointLight(0xfff4df, 0.42, 8, 2.0);
+    pointLight.name = 'ceilingPointLight';
+    pointLight.position.set(x, wallH - 0.38, z);
+    group.add(pointLight);
+  }
+
+  // 天花板内的资源在多个灯具之间共享;移除 ceilingGroup 时不应重复 dispose。
+  markSharedResources(group);
+  return group;
+}
+
 function disposeObject(root: THREE.Object3D): void {
   root.traverse(obj => {
     if (!(obj instanceof THREE.Mesh)) return;
@@ -447,12 +542,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   header.position.set(HALF_W - 0.1, 3.2, -3);
   scene.add(header);
 
-  // PR #13 #7 天花板:米黄,顶到墙高 3.2m(朝下)。debug overlay 加 top-down 相机时需 toggle visible(留 PR #14)。
-  const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xe6d5a8, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W, ROOM_H), ceilingMat);
-  ceiling.rotation.x = Math.PI / 2;  // 朝下
-  ceiling.position.y = WALL_H;       // 顶到墙高
-  scene.add(ceiling);
+  // PR #13 #7 + Ben:程序化带灯天花板。整组命名,debug top-down 时可 scene.remove(ceilingGroup)。
+  scene.add(buildCeiling(ROOM_W, ROOM_H, WALL_H));
 
   // PR #13 #7 北/南/西三面墙各 2 个发光窗(复用东墙 pattern:发光 plane + 竖梃 3 根)。
   // 竖梃沿墙轴方向偏移:rotY=0(N/S 墙,窗宽沿 x)→ x 偏移;rotY=π/2(西墙,窗宽沿 z)→ z 偏移。
