@@ -172,9 +172,9 @@ export function createThirdPersonController(opts: ControllerOptions): ThirdPerso
       // 角色朝向 = yaw 即时(tank-style,无需 lerp)
       player.rotation.y = yaw;
 
-      // 场地边界
-      const hw = bounds.w / 2 - 0.4;
-      const hd = bounds.d / 2 - 0.4;
+      // 场地边界:margin 覆盖程序化猫手臂外延(±0.46)+ 余量,避免贴墙时半边手臂穿墙
+      const hw = bounds.w / 2 - 0.5;
+      const hd = bounds.d / 2 - 0.5;
       player.position.x = Math.min(hw, Math.max(-hw, player.position.x));
       player.position.z = Math.min(hd, Math.max(-hd, player.position.z));
 
