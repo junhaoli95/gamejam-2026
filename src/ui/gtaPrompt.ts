@@ -121,7 +121,7 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
   const bottomEl = document.createElement('div');
   bottomEl.className = 'gta-bottom';
   bottomEl.innerHTML =
-    '<div class="gta-dash-hint">[Shift] dash</div>' +
+    '<div class="gta-dash-hint">[Shift] charge</div>' +
     '<div class="stamina-bar"><div class="stamina-bar-fill"></div></div>' +
     '<div class="gta-guide"></div>';
   document.body.appendChild(bottomEl);
