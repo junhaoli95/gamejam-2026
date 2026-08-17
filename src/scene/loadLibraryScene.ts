@@ -542,16 +542,17 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   }
 
   // PR #12 §2.7 电位材质:空=绿/占=红,被 NPC 占位时切换 mesh.material
-  // 插座 emissiveMap:面板白色(发光)+ 两条黑色竖线(插孔不发光)
+  // 插座 emissiveMap:面板白色(发光)+ 三插暗孔(两竖 + 下方一横,三扁插式)
   const outletEmissiveMap = (() => {
     const size = 64;
     const data = new Uint8Array(size * size * 4);
-    const cx = size / 2, cy = size / 2, lineW = 4, lineH = 15, gap = 8;
+    const cx = size / 2, cy = size / 2, lineW = 4, slotH = 12, gap = 9, groundW = 16, groundY = 14;
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const i = (y * size + x) * 4;
-        const inLine = (Math.abs(x - (cx - gap)) <= lineW || Math.abs(x - (cx + gap)) <= lineW) && Math.abs(y - cy) <= lineH;
-        const v = inLine ? 0 : 255;
+        const inVert = (Math.abs(x - (cx - gap)) <= lineW || Math.abs(x - (cx + gap)) <= lineW) && Math.abs(y - (cy - 2)) <= slotH;
+        const inGround = Math.abs(x - cx) <= groundW && Math.abs(y - (cy + groundY)) <= lineW;
+        const v = (inVert || inGround) ? 0 : 255;
         data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
       }
     }
