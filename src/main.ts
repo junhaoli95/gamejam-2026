@@ -31,43 +31,21 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // --- Scene ---
-const { scene, player, colliders, outlets, update, resetPlayerAnimation, rebuildTableZone, setColliderHelpersVisible, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
+const { scene, player, colliders, outlets, update, resetPlayerAnimation, randomizeOccupiedOutlets, setOutletOccupied, getNpcMeshes, terrain } =
   createLibraryScene(DEFAULT_DEBUG_PARAMS);
 
 // PR #28:刷新/回访 → 总是显标题屏(除非刚选过关的 reload 用 sessionStorage 一次性跳过);
-// 标题屏选关 → reload → 跳过标题,显"点击开始" overlay(音频手势入口)。
+// 标题屏选关 → reload → 跳过标题,直接开始游戏(无中间 overlay)。
 let gameStarted = false;
-const overlay = document.createElement('div');
-overlay.textContent = 'WASD move (A/D turn) · Shift dash · 1/2/3 apps · E plug in';
-Object.assign(overlay.style, {
-  position: 'fixed',
-  inset: '0',
-  display: 'none',  // 默认隐藏;只有"已选关 reload"路径才显
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'rgba(20, 16, 10, 0.55)',
-  color: '#ffe9c4',
-  font: '16px/1.6 system-ui, sans-serif',
-  letterSpacing: '0.05em',
-  cursor: 'pointer',
-  zIndex: '10',
-});
-document.body.appendChild(overlay);
-
-function showStartOverlay(): void {
-  overlay.style.display = 'flex';
-}
-overlay.addEventListener('click', () => {
-  overlay.style.display = 'none';
-  gameStarted = true;
-  audio.startBGM(); // PR #16:首次用户点击启动 BGM(AudioContext 手势内 resume)
-});
+let bgmStarted = false;
 
 if (shouldSkipTitleOnReload()) {
-  showStartOverlay();          // 刚选过关的 reload:跳过标题直接进游戏
+  // 刚选过关的 reload:直接进游戏
+  gameStarted = true;
+  // BGM 需用户手势(浏览器 autoplay policy)——延迟到首次按键/点击
 } else {
-  mountTitleScreen({           // 首次/刷新/回标题:总显标题屏
-    onStart: showStartOverlay, // 点已选中的关卡 → 直接开始(布局已加载)
+  mountTitleScreen({
+    onStart: () => { gameStarted = true; },
   });
 }
 
@@ -96,7 +74,6 @@ const controller = createThirdPersonController({
   player,
   colliders,
   bounds: { w: CONFIG.world.w, d: CONFIG.world.d },
-  overlay,
   getDashMult: playerStats.getDashSpeedMult,
 });
 
@@ -143,6 +120,17 @@ function getSharedState() {
 
 // --- Mount phone HUD stub(Sam 在 PR #9 替换 mountPhoneHud 实现,调用点不动)---
 const audio = mountAudio(); // PR #16 §4.2:Roy 加(位于 mountPhoneHud 之前)
+
+// 首次任意按键/点击启动 BGM(autoplay policy 要求手势内 resume AudioContext)
+function tryStartBgmOnce(): void {
+  if (!bgmStarted) {
+    bgmStarted = true;
+    audio.startBGM();
+  }
+}
+window.addEventListener('keydown', tryStartBgmOnce);
+window.addEventListener('click', tryStartBgmOnce);
+
 mountPhoneHud({
   getSharedState,
   onAppAction: (action) => {
@@ -154,6 +142,7 @@ mountPhoneHud({
       gameWon = false;
       gameOver = false;
       lowLatch = false; // PR #16:低电警报 latch 复位
+      bgmStarted = true;
       audio.startBGM(); // PR #16:重开一局,恢复 BGM(若已停)
       playerStats.reset();
       player.position.set(0, 0, 8.5);
@@ -171,7 +160,16 @@ mountPhoneHud({
 
 // PR #13 §3.4:GTA 提示系统 mount(左上 prompt + 中下任务条)
 // TODO PR #13-David merge 后改 CONFIG.hud.objectiveText(Sam 先硬编码)
-mountGtaPrompt({ getSharedState, objectiveText: CONFIG.hud.objectiveText });  // PR #28:读 CONFIG,英文化集中管理
+mountGtaPrompt({
+  getSharedState,
+  objectiveText: CONFIG.hud.objectiveText,
+  getActiveAppRate: () => {
+    if (runtime.appOpen.MAP) return 2;
+    if (runtime.appOpen.RADAR) return 3;
+    if (runtime.appOpen.QUERY) return 4;
+    return 1;  // home / no app
+  },
+});
 
 // PR #16 §2.3 奖励系统 mount(mountGtaPrompt 之后)
 mountMissionToast({ getSharedState });
@@ -256,17 +254,6 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-// --- Debug overlay (dev only; dynamic import keeps lil-gui out of prod bundle) ---
-if (import.meta.env.DEV) {
-  import('./debug/overlay').then(({ attachDebugGui }) => {
-    attachDebugGui({
-      rebuildTableZone,
-      setColliderHelpersVisible,
-      defaultParams: DEFAULT_DEBUG_PARAMS,
-    });
-  });
-}
 
 // --- Game loop ---
 // dt clamped so tab-switch won't cause physics/anim jumps.

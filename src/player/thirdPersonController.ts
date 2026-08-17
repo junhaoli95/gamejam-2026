@@ -26,7 +26,7 @@ interface ControllerOptions {
   player: THREE.Group;
   colliders: THREE.Box3[];
   bounds: { w: number; d: number };
-  overlay: HTMLElement;
+  overlay?: HTMLElement;
   /** dash 倍速回调。idle=1,冲刺=CONFIG.dash.dashMult。controller 不持有 game 状态,只读外部 mult。 */
   getDashMult: () => number;
 }
