@@ -168,6 +168,40 @@ describe('NPC 简化版状态机 (PR #16)', () => {
     expect(e.x).toBeGreaterThanOrEqual(0.88 - 1e-6);  // 柱右边缘外(radius 0.38)
   });
 
+  it('桩在碰撞体边缘且 NPC 被推出时仍会完成占用', () => {
+    // 真实场景中的墙/柱面桩:NPC 到达桩附近后会被 resolveCollision 推到碰撞体外,
+    // 不能要求它继续走到被碰撞体挡住的最后一个 waypoint。
+    const column = new Box3(new Vector3(-0.5, 0, -1), new Vector3(0.5, 3, 1));
+    const occupied = [false];
+    const grid = toGrid([column], 20, 20, 0.4, 0.38);
+    const controller = createNpcController({
+      getOutletCount: () => 1,
+      getOutletPos: () => ({ x: 0.5, z: 0 }),
+      isOutletOccupied: () => occupied[0],
+      setOutletOccupied: (_i, occ) => { occupied[0] = occ; },
+      npcCount: 1,
+      cfg: pathCfg,
+      grid,
+      colliders: [{ minX: -0.5, minZ: -1, maxX: 0.5, maxZ: 1 }],
+    });
+    const e = controller.entities[0];
+    e.x = 4; e.z = 0;
+    controller.update(0.15);
+
+    // 模拟真实卡死状态:NPC 已被推出到柱外,但当前 waypoint 仍在柱的另一侧。
+    // 旧逻辑会每帧向 waypoint 走、再被推出,永远不会 pathIdx++。
+    e.x = 0.88; e.z = 0;
+    e.path = [{ x: 10, z: 10 }, { x: 9, z: 10 }, { x: 8, z: 10 }];
+    e.pathX = [0.88, -0.5, -0.5];
+    e.pathZ = [0, 0, 0];
+    e.pathIdx = 1;
+    for (let i = 0; i < 10 && e.state !== 'occupying'; i++) controller.update(0.1);
+
+    expect(e.state).toBe('occupying');
+    expect(occupied[0]).toBe(true);
+    expect(e.x).toBeGreaterThanOrEqual(0.88 - 1e-6);
+  });
+
   it('不可占桩(壁插):最近桩不可占 → 跳过,选次近可占桩', () => {
     // 0 号(5m)= 壁插不可占,1 号(10m)= 可占
     const { controller } = makeHarness(

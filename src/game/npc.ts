@@ -354,27 +354,18 @@ export function createNpcController(opts: NpcControllerOptions): NpcController {
               remaining = 0;
             }
           }
-          // 到达判定:path 走完 = 到达(A* 终点已是桩旁 nearestFreeCell;dist 门限会误杀
-          //   桩压 cell 边界的情形——如 cell 中心离桩 0.83m > arriveDist 0.8m,NPC 被锁原地)。
-          //   因此只看 pathIdx,不再叠加 dist 条件。
-          const dx = p.x - e.x;
-          const dz = p.z - e.z;
-          const distToOutlet = Math.hypot(dx, dz);
-          if (e.pathIdx >= e.path.length) {
-            resolveCollision(e);
+          // 到达判定:路径终点或碰撞推出后已进入桩的有效半径都算到达。
+          // 桩贴墙/柱时,最后 waypoint 可能在碰撞体另一侧;若只等 pathIdx 走完,
+          // NPC 会每帧向 waypoint 走、再被 resolveCollision 推回,永远停在 moving。
+          const reachedPathEnd = e.pathIdx >= e.path.length;
+          resolveCollision(e);
+          const distToOutlet = Math.hypot(p.x - e.x, p.z - e.z);
+          if (reachedPathEnd || distToOutlet <= cfg.arriveDist) {
             e.state = 'occupying';
             reservedOutletBy.delete(e.targetOutletIndex);
             opts.setOutletOccupied(e.targetOutletIndex, true);
           } else {
-            // 未到:若 path 已走完但桩还远(最后一个 cell 中心不可达)→ 沿路径方向直线逼近
-            if (e.pathIdx >= e.path.length) {
-              const step = Math.min(remaining, distToOutlet);
-              if (distToOutlet > 1e-9) {
-                e.x += (dx / distToOutlet) * step;
-                e.z += (dz / distToOutlet) * step;
-              }
-            }
-            resolveCollision(e);
+            // 未到:继续追踪下一个 waypoint。
           }
         } else {
           // 直线模式(无 grid / path 未算):原逻辑
