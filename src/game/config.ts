@@ -45,7 +45,7 @@ export const CONFIG = {
   },
   npc: {
     count: 3,
-    walkSpeed: 2.2,        // PR #16 B:略慢于玩家 walkSpeed 3.0
+    walkSpeed: 3.0,        // 与玩家 walkSpeed 完全一致
     idleMinSec: 2,
     idleMaxSec: 5,
     arriveDist: 0.8,       // 到桩 0.8m 内 = occupying

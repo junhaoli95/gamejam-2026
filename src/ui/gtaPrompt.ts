@@ -64,7 +64,14 @@ const CSS = `
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+}
+.gta-dash-hint {
+  font: bold 12px "Courier New", monospace;
+  color: #4ec3ff;
+  text-shadow: 0 0 4px rgba(78,195,255,0.5);
+  letter-spacing: 0.06em;
+  opacity: 0.8;
 }
 .stamina-bar {
   width: 180px;
@@ -114,6 +121,7 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
   const bottomEl = document.createElement('div');
   bottomEl.className = 'gta-bottom';
   bottomEl.innerHTML =
+    '<div class="gta-dash-hint">[Shift] dash</div>' +
     '<div class="stamina-bar"><div class="stamina-bar-fill"></div></div>' +
     '<div class="gta-guide"></div>';
   document.body.appendChild(bottomEl);
