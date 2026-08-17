@@ -773,6 +773,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   let currentParams: DebugParams = params;
   let furIdx = 0;
   const outletPositions: Array<{ x: number; z: number; occupied: boolean; occupiable: boolean; kind: 'mesh' | 'table' }> = [];
+  // 并行数组:壁插 axis('x'=南墙沿x / 'z'=西墙沿z),柱/桌桩为 null。NPC 摆位按此决定偏移方向。
+  const outletSpotAxes: Array<'x' | 'z' | null> = [];
 
   function buildOneStudyTable(p: Placement, tableIdx: number): void {
     const isCharge = p.kind === 'studyTable-charge';
@@ -920,6 +922,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     // 顺序:随机柱 → 随机壁插 先推,studyTable 由 buildOneStudyTable 接着推(保持同序)。
     // 注意:清空必须先于桌构建循环 —— 否则桌 outlet 会被 length=0 清掉(PR #12 遗留,PR #13 #4 修复)。
     outletPositions.length = 0;
+    outletSpotAxes.length = 0;
     outletMeshGroups.length = 0;
     tableOutletSeatKeys.length = 0;
     chargeOutletIndexes.clear();
@@ -928,6 +931,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       outletPositions.push({ x: c.x + c.face! * (MODEL_DIMS.column.w / 2 + 0.01), z: c.z, occupied: false, occupiable: true, kind: 'mesh' });
       outletMeshGroups.push([columnOutletMeshes[ciMesh++]]);
       tableOutletSeatKeys.push(null);
+      outletSpotAxes.push(null);
     }
     let wiMesh = 0;
     for (const w of outletDraw.walls) {
@@ -935,6 +939,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       // 壁插现在也参与 NPC 占用(mesh-backed),与柱/桌桩同套 setOutletOccupied 切色
       outletMeshGroups.push([wallSocketMeshes[wiMesh++]]);
       tableOutletSeatKeys.push(null);
+      outletSpotAxes.push(w.axis ?? null);
     }
     // study table outlets 由 buildOneStudyTable 内 push(在柱/壁插之后)
 
@@ -1082,8 +1087,18 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
       for (const m of outletMeshGroups[idx]) m.material = outletMatOccupied;
       const o = outletPositions[idx];
       const npc = createStandingCat(paletteForFur(FUR_COLORS[Math.floor(rng() * FUR_COLORS.length)]));
-      // 桩旁偏前:端板盒/柱电位贴柱面,偏移 0.8(柱半宽 0.45 + 猫半宽 0.3 + margin)避免视觉贴柱
-      npc.position.set(o.x, 0, o.z + 0.8);
+      // NPC 偏移方向按桩类型:壁插朝房间中心,柱保持桩旁偏前
+      const axis = outletSpotAxes[idx];
+      if (axis === 'x') {
+        // 南墙(沿x,墙在正z):NPC 往 -z(房间内)偏
+        npc.position.set(o.x, 0, o.z - 0.8);
+      } else if (axis === 'z') {
+        // 西墙(沿z,墙在负x):NPC 往 +x(房间内)偏
+        npc.position.set(o.x + 0.8, 0, o.z);
+      } else {
+        // 柱电位:桩旁偏前(原逻辑)
+        npc.position.set(o.x, 0, o.z + 0.8);
+      }
       scene.add(npc);
       npcMeshes.push(npc);
     }
