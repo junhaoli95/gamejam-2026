@@ -30,7 +30,42 @@ function makeHarness(positions: Array<{ x: number; z: number }>, occupiable?: bo
   return { controller, occupied };
 }
 
+function makeMultiNpcHarness(positions: Array<{ x: number; z: number }>, npcCount: number) {
+  const occupied = positions.map(() => false);
+  const controller = createNpcController({
+    getOutletCount: () => positions.length,
+    getOutletPos: (i) => positions[i],
+    isOutletOccupied: (i) => occupied[i],
+    setOutletOccupied: (i, occ) => { occupied[i] = occ; },
+    npcCount,
+    cfg,
+  });
+  return { controller, occupied };
+}
+
 describe('NPC 简化版状态机 (PR #16)', () => {
+  it('同一帧多个 NPC 不会预定同一个空桩', () => {
+    const { controller, occupied } = makeMultiNpcHarness(
+      [{ x: 10, z: 0 }, { x: 20, z: 0 }],
+      2,
+    );
+    const [first, second] = controller.entities;
+
+    // 两个 NPC 都从原点出发;没有 reservation 时会同时选中 0 号桩。
+    controller.update(0.15);
+    expect(first.state).toBe('moving');
+    expect(second.state).toBe('moving');
+    expect(first.targetOutletIndex).toBe(0);
+    expect(second.targetOutletIndex).toBe(1);
+
+    // 两个目标都应最终完成占用,且不会互相覆盖同一根桩。
+    controller.update(10);
+    controller.update(0.01);
+    expect(first.state).toBe('occupying');
+    expect(second.state).toBe('occupying');
+    expect(occupied).toEqual([true, true]);
+  });
+
   it('完整周期:idle → moving → occupying(占桩变红,永久占用 —— 不再释放)', () => {
     const { controller, occupied } = makeHarness([{ x: 20, z: 0 }, { x: 30, z: 0 }]);
     const e = controller.entities[0];
