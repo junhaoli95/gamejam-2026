@@ -1,4 +1,3 @@
-import { CONFIG } from '../game/config';
 import type { SharedState, AppAction } from '../platform/sharedState';
 import { createMinimap, type MinimapHandle } from './minimap';
 
@@ -136,22 +135,18 @@ const CSS = `
   transition: transform .12s linear, background .2s ease;
 }
 .phone-battery-fill.low { background: #ff4d4d; }
-.phone-battery-time {
+.phone-battery-pct {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   font: bold 8px ui-monospace, "SF Mono", Menlo, monospace;
-  color: #ff5a5a;
-  text-shadow: 0 0 5px rgba(255,80,80,0.75);
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0,0,0,0.9), 0 1px 1px rgba(0,0,0,0.8);
   z-index: 2;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   pointer-events: none;
-}
-.phone-battery-pct {
-  font: bold 9px sans-serif;
-  color: #ff5a5a;
 }
 
 .phone-lowbatt-banner { position: absolute; top: 24px; left: 0; right: 0; height: 4px; background: linear-gradient(180deg,#ff4d4d,#c92828); border-radius: 0 0 8px 8px; transform: translateY(-110%); transition: transform .35s cubic-bezier(.22,1,.36,1); pointer-events: none; box-shadow: 0 4px 14px rgba(255,77,77,0.4); z-index: 9; }
@@ -515,9 +510,8 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <span class="phone-battery">
         <span class="phone-battery-shell">
           <span class="phone-battery-fill"></span>
-          <span class="phone-battery-time">3:00</span>
+          <span class="phone-battery-pct">100%</span>
         </span>
-        <span class="phone-battery-pct">100%</span>
       </span>
     </span>
   </div>
@@ -553,7 +547,6 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     </div>
   </div>
   <div class="phone-game-over hidden"><div class="phone-game-title">No Power</div><div class="phone-game-subtitle">Your phone died. You're trapped in the library.</div><button class="phone-restart-btn">Retry</button><button class="phone-menu-btn">Menu</button></div>
-  <div class="phone-game-win hidden"><div class="phone-game-title">Charged!</div><div class="phone-game-subtitle">You survived.</div><button class="phone-restart-btn">Retry</button><button class="phone-menu-btn">Menu</button></div>
 </div>`;
 
   root.appendChild(chassis);
@@ -562,17 +555,13 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   // ── refs ─────────────────────────────────────────────────────────────────
   const blackoutEl = chassis.querySelector<HTMLElement>('.phone-screen-blackout')!;
   const battFillEl = chassis.querySelector<HTMLElement>('.phone-battery-fill')!;
-  const battTimeEl = chassis.querySelector<HTMLElement>('.phone-battery-time')!;
   const battPctEl  = chassis.querySelector<HTMLElement>('.phone-battery-pct')!;
   const bannerEl   = chassis.querySelector<HTMLElement>('.phone-lowbatt-banner')!;
-  // PR #12 §2.6.5 胜负弹窗(refs;§2.6.4 pip bar 已删,能量条移至 gtaPrompt 右上角 stamina bar)
+  // PR #12 §2.6.5 失败弹窗(胜利改用屏幕中间 missionToast)
   const gameOverEl   = chassis.querySelector<HTMLElement>('.phone-game-over')!;
-  const gameWinEl    = chassis.querySelector<HTMLElement>('.phone-game-win')!;
   const restartOverBtn = chassis.querySelector<HTMLElement>('.phone-game-over .phone-restart-btn')!;
-  const restartWinBtn  = chassis.querySelector<HTMLElement>('.phone-game-win .phone-restart-btn')!;
   // PR #28:retry 屏加 Menu 按钮 — 返回标题屏(清 localStorage + reload)
   const menuOverBtn = chassis.querySelector<HTMLElement>('.phone-game-over .phone-menu-btn')!;
-  const menuWinBtn  = chassis.querySelector<HTMLElement>('.phone-game-win .phone-menu-btn')!;
   const homeEl     = chassis.querySelector<HTMLElement>('.phone-home')!;
   const mapEl     = chassis.querySelector<HTMLElement>('.phone-app-view.map')!;
   const radarEl   = chassis.querySelector<HTMLElement>('.phone-app-view.radar')!;
@@ -700,18 +689,12 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     setActiveApp('home');
     opts.onAppAction({ kind: 'restart' });
   });
-  restartWinBtn.addEventListener('click', () => {
-    if (activeApp !== 'home') opts.onAppAction({ kind: 'toggle-app', app: activeApp });
-    setActiveApp('home');
-    opts.onAppAction({ kind: 'restart' });
-  });
   // PR #28:Menu 按钮 — 回标题屏(清 localStorage.titleLevelIndex + reload)
   function backToTitle(): void {
     try { localStorage.removeItem('titleLevelIndex'); } catch { /* ignore */ }
     location.reload();
   }
   menuOverBtn.addEventListener('click', backToTitle);
-  menuWinBtn.addEventListener('click', backToTitle);
 
   // ── keyboard ─────────────────────────────────────────────────────────────
   function onKey(e: KeyboardEvent): void {
@@ -753,9 +736,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     battFillEl.style.transform = `scaleY(${fillScale})`;
     battFillEl.classList.toggle('low', battery <= 0.10);
 
-    // 秒数 primary + % auxiliary(方案 B:剩余秒 = battery / baseDrain = battery × totalGameTimeS / startPercent)
-    const totalSecRaw = battery * CONFIG.battery.totalGameTimeS / CONFIG.battery.startPercent;
-    battTimeEl.textContent = `${Math.max(0, Math.round(totalSecRaw))}s`;
+    // 百分比(剩余秒数移至底部 GTA 指南条)
     battPctEl.textContent = `${Math.round(battery * 100)}%`;
 
     // thresholds: ≤10% banner show; ≤3% +blink; ≤0 blackout.
@@ -772,11 +753,9 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
     qEmptyEl.textContent = String(emptyN);
     qOccEl.textContent = String(occN);
 
-    // PR #12 §2.6.5 胜负弹窗 toggle(hidden)-没电(state.won=false && battery<=0)→显 game over,
-    // 胜利(state.won=true)→显 win。state.won / battery 都由 getSharedState()[commit 5]
-    // 提供(main.ts wrap 加 won: gameWon)。
+    // PR #12 §2.6.5 失败弹窗 toggle — 没电(state.won=false && battery<=0)→显 game over
+    // 胜利(state.won=true)由屏幕中间 missionToast 显示,不再用 phone HUD 弹窗
     gameOverEl.classList.toggle('hidden', !(!state.won && state.battery <= 0));
-    gameWinEl.classList.toggle('hidden', !state.won);
 
     // app-specific paint
     if (activeApp === 'map') {

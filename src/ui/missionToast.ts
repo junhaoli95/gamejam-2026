@@ -16,21 +16,22 @@ const STYLE_ID = 'mission-toast-styles';
 const CSS = `
 .mission-toast {
   position: fixed;
-  bottom: 120px;
-  right: 24px;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
   z-index: 25;
   color: #4eff7a;
-  font: bold 20px sans-serif;
-  letter-spacing: 0.08em;
-  text-shadow: 0 0 12px rgba(78,255,122,0.6);
+  font: bold 42px sans-serif;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 16px rgba(78,255,122,0.7), 0 2px 4px rgba(0,0,0,0.8);
   opacity: 0;
-  transform: translateY(20px);
   transition: opacity 200ms, transform 200ms;
   pointer-events: none;
+  white-space: nowrap;
 }
 .mission-toast.show {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(-50%) translateY(0);
 }
 `;
 
@@ -49,7 +50,7 @@ export function mountMissionToast(opts: MissionToastOptions): void {
 
   const toastEl = document.createElement('div');
   toastEl.className = 'mission-toast success';
-  toastEl.innerHTML = '<span class="mission-toast-text">Charge success +REP</span>';
+  toastEl.innerHTML = '<span class="mission-toast-text">Charge Success +REP</span>';
   document.body.appendChild(toastEl);
 
   let hideTimer = 0;

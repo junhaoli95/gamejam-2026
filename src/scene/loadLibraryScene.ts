@@ -11,21 +11,16 @@ import {
 } from './proceduralCat';
 import { createProceduralBookshelf } from './proceduralLibraryProps';
 import layout from './layout.json';
-// PR #28 标题屏选关 — 4 个布局快照(Sam PR #24 验过的 5 个布局,Islands = layout.json):
-import layout1 from './layouts/layout1.json';  // Open Lobby(7桌)
-import layout2 from './layouts/layout2.json';  // Compact Study(19桌)
-import layout3 from './layouts/layout3.json';  // Maze(7桌)
-import layout5 from './layouts/layout5.json';  // Arena(9桌)
-
-// 标题屏已选过的布局 index(localStorage 持久,1-5;默认 4 = Islands)
+// 标题屏已选关卡 index(localStorage 持久,1=图书馆;默认 1)
 function readLevelIndex(): number {
   try {
     const v = Number(localStorage.getItem('titleLevelIndex'));
-    return Number.isInteger(v) && v >= 1 && v <= 5 ? v : 4;
-  } catch { return 4; }  // SSR/无 localStorage 环境
+    return Number.isInteger(v) && v >= 1 ? v : 1;
+  } catch { return 1; }
 }
 const LEVEL_INDEX = readLevelIndex();
-const LAYOUT_BY_INDEX: LayoutData[] = [layout1, layout2, layout3, layout, layout5];
+// 关卡 1 = 图书馆(layout.json / Islands)。关卡 2 = 机场(待开发,暂 fallback 图书馆)
+const LAYOUT_BY_INDEX: LayoutData[] = [layout, layout];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Library scene (布局数据驱动 v7 — 家具坐标唯一真相源 = src/scene/layout.json)

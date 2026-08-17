@@ -1,4 +1,5 @@
 import type { SharedState } from '../platform/sharedState';
+import { CONFIG } from '../game/config';
 
 // ============================================================================
 // GTA 提示系统(PR #13 §3.3 + PR #15 迭代)— 左上单槽位提示 + 右上 stamina bar
@@ -14,6 +15,8 @@ export interface GtaPromptOptions {
   getSharedState: () => SharedState;
   /** 任务条文案(PR #13-David merge 前由 main.ts 硬编码,之后改 CONFIG.hud.objectiveText) */
   objectiveText: string;
+  /** 当前活跃 app 的耗电倍率(home=1, map=2, radar=3, query=4),用于底部指南显示 */
+  getActiveAppRate: () => number;
 }
 
 const STYLE_ID = 'gta-prompt-styles';
@@ -50,18 +53,25 @@ const CSS = `
   font: 14px sans-serif;
 }
 
-/* PR #14 右上角 stamina bar(GTA Vice City 同款) */
-.stamina-bar {
+/* 底部中间 stamina bar + 游戏指南(GTA Vice City 绿色字体) */
+.gta-bottom {
   position: fixed;
-  top: 24px;
-  right: 24px;
-  width: 120px;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.stamina-bar {
+  width: 180px;
   height: 8px;
   background: rgba(0,0,0,0.65);
   border-radius: 4px;
   overflow: hidden;
-  z-index: 20;
-  pointer-events: none;
 }
 .stamina-bar-fill {
   height: 100%;
@@ -70,6 +80,13 @@ const CSS = `
   transition: width 80ms linear;
 }
 .stamina-bar.low .stamina-bar-fill { background: #ff4d4d; }
+.gta-guide {
+  font: bold 14px "Courier New", monospace;
+  color: #2dff7a;
+  text-shadow: 0 0 4px rgba(45,255,122,0.5);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
 `;
 
 function injectStylesOnce(): void {
@@ -93,12 +110,15 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
   const promptIconEl = promptEl.querySelector<HTMLElement>('.gta-prompt-icon')!;
   const promptTextEl = promptEl.querySelector<HTMLElement>('.gta-prompt-text')!;
 
-  // PR #14 右上角 stamina bar(fill 宽度 = state.pips × 100%)
-  const staminaEl = document.createElement('div');
-  staminaEl.className = 'stamina-bar';
-  staminaEl.innerHTML = '<div class="stamina-bar-fill"></div>';
-  document.body.appendChild(staminaEl);
-  const staminaFillEl = staminaEl.querySelector<HTMLElement>('.stamina-bar-fill')!;
+  // 底部中间:stamina bar + 游戏指南(GTA 绿色字体)
+  const bottomEl = document.createElement('div');
+  bottomEl.className = 'gta-bottom';
+  bottomEl.innerHTML =
+    '<div class="stamina-bar"><div class="stamina-bar-fill"></div></div>' +
+    '<div class="gta-guide"></div>';
+  document.body.appendChild(bottomEl);
+  const staminaFillEl = bottomEl.querySelector<HTMLElement>('.stamina-bar-fill')!;
+  const guideEl = bottomEl.querySelector<HTMLElement>('.gta-guide')!;
 
   let promptShown = false;
   let hideTimer = 0;
@@ -150,10 +170,16 @@ export function mountGtaPrompt(opts: GtaPromptOptions): void {
     } else {
       currentMode = null; // game end 后重置,下局开始时重新触发过渡
     }
-    // stamina bar:fill width = pips × 100%;<0.2 变红(替代 phone HUD 内 pip bar)
+    // stamina bar:fill width = pips × 100%;<0.2 变红
     const pips = Math.max(0, Math.min(1, state.pips));
     staminaFillEl.style.width = `${pips * 100}%`;
-    staminaEl.classList.toggle('low', pips < 0.2);
+    const staminaBar = bottomEl.querySelector<HTMLElement>('.stamina-bar')!;
+    staminaBar.classList.toggle('low', pips < 0.2);
+    // GTA 绿色指南:数字键切换 app + 当前费率 + 剩余时间
+    const rate = opts.getActiveAppRate();
+    const totalSecRaw = state.battery * CONFIG.battery.totalGameTimeS / CONFIG.battery.startPercent;
+    const sec = Math.max(0, Math.round(totalSecRaw));
+    guideEl.textContent = `[1/2/3] switch apps  ·  ×${rate} drain  ·  ${sec}s left`;
   }
   requestAnimationFrame(loop);
 }
