@@ -1020,10 +1020,6 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     outlets: outletPositions,
     resetPlayerAnimation,
     update: (dt: number) => {
-      const seatedMotion = { speed: 0, directionX: 0, directionZ: 0, isDashing: false, dt };
-      for (const cat of staticSeatedCats) updateCatAnimation(cat, seatedMotion);
-      for (const cat of tableSeatedCats) updateCatAnimation(cat, seatedMotion);
-
       const dx = player.position.x - previousPlayerPosition.x;
       const dz = player.position.z - previousPlayerPosition.z;
       const distance = Math.hypot(dx, dz);
