@@ -542,10 +542,28 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   }
 
   // PR #12 §2.7 电位材质:空=绿/占=红,被 NPC 占位时切换 mesh.material
+  // 插座 emissiveMap:面板白色(发光)+ 两条黑色竖线(插孔不发光)
+  const outletEmissiveMap = (() => {
+    const size = 64;
+    const data = new Uint8Array(size * size * 4);
+    const cx = size / 2, cy = size / 2, lineW = 4, lineH = 15, gap = 8;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        const inLine = (Math.abs(x - (cx - gap)) <= lineW || Math.abs(x - (cx + gap)) <= lineW) && Math.abs(y - cy) <= lineH;
+        const v = inLine ? 0 : 255;
+        data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+      }
+    }
+    const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    tex.needsUpdate = true;
+    return tex;
+  })();
   const outletMatEmpty = new THREE.MeshStandardMaterial({
     color: 0x0a3318,
     emissive: 0x2dff7a,
     emissiveIntensity: 1.2,
+    emissiveMap: outletEmissiveMap,
     roughness: 0.4,
     metalness: 0,
   });
@@ -553,6 +571,7 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
     color: 0x33100a,
     emissive: 0xff4d4d,
     emissiveIntensity: 1.2,
+    emissiveMap: outletEmissiveMap,
     roughness: 0.4,
     metalness: 0,
   });
