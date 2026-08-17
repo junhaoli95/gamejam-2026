@@ -228,11 +228,13 @@ function layoutColumnFace(x: number): 1 | -1 {
   return x < 0 ? 1 : -1;
 }
 
-function wallCandidatesFromLayout(): Array<{ x: number; z: number }> {
-  const out: Array<{ x: number; z: number }> = [];
+function wallCandidatesFromLayout(): Array<{ x: number; z: number; axis: 'x' | 'z' }> {
+  const out: Array<{ x: number; z: number; axis: 'x' | 'z' }> = [];
   const hw = LAYOUT.room.w / 2, hh = LAYOUT.room.h / 2, m = 0.27;
-  for (let x = -(hw - 2); x <= hw - 2; x += 2) out.push({ x, z: hh - m });
-  for (let z = -(hh - 2); z <= hh - 2; z += 2) out.push({ x: -(hw - m), z });
+  // 南墙:沿 x 方向墙,墙厚沿 z → 插座 axis='x'(geo 默认 x 宽 z 薄即正确)
+  for (let x = -(hw - 2); x <= hw - 2; x += 2) out.push({ x, z: hh - m, axis: 'x' });
+  // 西墙:沿 z 方向墙,墙厚沿 x → 插座 axis='z'(mesh 需 rotation.y=π/2 让 x/z 互换,否则穿墙)
+  for (let z = -(hh - 2); z <= hh - 2; z += 2) out.push({ x: -(hw - m), z, axis: 'z' });
   return out;
 }
 
@@ -250,7 +252,7 @@ function gameSeed(): number {
   return (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
 }
 
-interface OutletSpot { x: number; z: number; face?: 1 | -1; }
+interface OutletSpot { x: number; z: number; face?: 1 | -1; axis?: 'x' | 'z'; }
 
 /** randInt 闭区间整数(与编辑器 simDraw 同款)。 */
 function randInt(rng: () => number, min: number, max: number): number {
@@ -274,9 +276,9 @@ function drawOutletSpots(): { columns: OutletSpot[]; walls: OutletSpot[]; seed: 
 
   const allCols = layoutColumns();
   const allWalls = wallCandidatesFromLayout();
-  const pool = shuffle<{ x: number; z: number; kind: 'column' | 'wall' }>(
+  const pool = shuffle<{ x: number; z: number; kind: 'column' | 'wall'; axis?: 'x' | 'z' }>(
     [...allCols.map(c => ({ x: c.x, z: c.z, kind: 'column' as const })),
-     ...allWalls.map(w => ({ x: w.x, z: w.z, kind: 'wall' as const }))],
+     ...allWalls.map(w => ({ x: w.x, z: w.z, kind: 'wall' as const, axis: w.axis }))],
     rng,
   );
 
@@ -288,7 +290,7 @@ function drawOutletSpots(): { columns: OutletSpot[]; walls: OutletSpot[]; seed: 
 
   const drawn = pool.slice(0, need);
   const columns = drawn.filter(d => d.kind === 'column').map(c => ({ x: c.x, z: c.z, face: layoutColumnFace(c.x) }));
-  const walls = drawn.filter(d => d.kind === 'wall').map(w => ({ x: w.x, z: w.z }));
+  const walls = drawn.filter(d => d.kind === 'wall').map(w => ({ x: w.x, z: w.z, axis: w.axis }));
   return { columns, walls, seed, npcCount, greenTarget };
 }
 
@@ -681,6 +683,8 @@ export function createLibraryScene(params: DebugParams = DEFAULT_DEBUG_PARAMS): 
   for (const w of outletDraw.walls) {
     const m = new THREE.Mesh(wallSocketGeo, outletMatEmpty);
     m.position.set(w.x, MODEL_DIMS.wallSocket.h / 2, w.z);
+    // 西墙(沿 z 轴):旋转 90° 让插座 x/z 互换,避免 x=0.3 穿墙厚 0.2
+    if (w.axis === 'z') m.rotation.y = Math.PI / 2;
     scene.add(m);
     wallSocketMeshes.push(m);
   }
