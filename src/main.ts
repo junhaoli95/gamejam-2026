@@ -246,6 +246,25 @@ if (import.meta.env.DEV) {
       get colliders() { return colliders.map(b => ({ minX: b.min.x, minZ: b.min.z, maxX: b.max.x, maxZ: b.max.z })); },
     },
   });
+
+  // 临时 debug overlay:屏幕左上角显示 NPC 状态(不依赖 MCP)
+  const dbgEl = document.createElement('div');
+  Object.assign(dbgEl.style, {
+    position: 'fixed', top: '4px', left: '4px', zIndex: '9999',
+    font: '11px monospace', color: '#0f0', background: 'rgba(0,0,0,0.7)',
+    padding: '4px 8px', borderRadius: '3px', pointerEvents: 'none', whiteSpace: 'pre',
+  });
+  document.body.appendChild(dbgEl);
+  const dbgLoop = () => {
+    requestAnimationFrame(dbgLoop);
+    const s = getSharedState();
+    const lines = s.npcs.map((n, i) =>
+      `npc${i}: ${n.state} target=${n.targetIndex} x=${n.x.toFixed(1)} z=${n.z.toFixed(1)}`
+    );
+    const meshFree = s.outlets.filter(o => !o.occupied && o.kind === 'mesh').length;
+    dbgEl.textContent = `meshFree=${meshFree}\n${lines.join('\n')}`;
+  };
+  dbgLoop();
 }
 
 // --- Resize ---

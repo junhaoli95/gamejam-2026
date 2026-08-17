@@ -46,8 +46,8 @@ export const CONFIG = {
   npc: {
     count: 3,
     walkSpeed: 3.0,        // 与玩家 walkSpeed 完全一致
-    idleMinSec: 2,
-    idleMaxSec: 5,
+    idleMinSec: 0.5,
+    idleMaxSec: 1.5,
     arriveDist: 0.8,       // 到桩 0.8m 内 = occupying
     wanderChance: 0.2,     // idle 结束时掷骰走 wander 的概率(低 → NPC 更积极抢桩)
     wanderRadius: 4,       // wander 目标点距离上限(m),在 NPC 附近 0~4m 找 free cell
