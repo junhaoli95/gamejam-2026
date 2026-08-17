@@ -173,7 +173,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/health') {
-      send(res, 200, { ok: true, target: TARGET, hasLayout: fs.existsSync(LAYOUT_FILE) });
+      send(res, 200, {
+        ok: true,
+        target: TARGET,
+        hasLayout: fs.existsSync(LAYOUT_FILE),
+        configSync: true,
+      });
       return;
     }
     if (req.method === 'GET' && url.pathname === '/layout/history') {

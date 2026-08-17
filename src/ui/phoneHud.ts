@@ -1,4 +1,5 @@
 import type { SharedState, AppAction } from '../platform/sharedState';
+import { CONFIG } from '../game/config';
 import { createMinimap, type MinimapHandle } from './minimap';
 
 // ============================================================================
@@ -524,7 +525,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-header map">
         <span class="app-header-back">← Back (1)</span>
         <span class="app-header-title">🗺 MAP</span>
-        <span class="app-header-rate">Power ×2</span>
+        <span class="app-header-rate">Power ×${CONFIG.battery.appMult.MAP}</span>
       </div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
     </div>
@@ -532,7 +533,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-header radar">
         <span class="app-header-back">← Back (2)</span>
         <span class="app-header-title">📡 RADAR</span>
-        <span class="app-header-rate">Power ×3</span>
+        <span class="app-header-rate">Power ×${CONFIG.battery.appMult.RADAR}</span>
       </div>
       <div class="canvas-wrap"><canvas width="220" height="220"></canvas></div>
     </div>
@@ -540,7 +541,7 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
       <div class="phone-app-header query">
         <span class="app-header-back">← Back (3)</span>
         <span class="app-header-title">⚡ QUERY</span>
-        <span class="app-header-rate">Power ×4</span>
+        <span class="app-header-rate">Power ×${CONFIG.battery.appMult.QUERY}</span>
       </div>
       <div class="phone-query-legend"></div>
       <div class="canvas-wrap"><canvas width="224" height="184"></canvas></div>
@@ -585,9 +586,9 @@ export function mountPhoneHud(opts: PhoneHudOptions): void {
   // PR #13 §3.1:rate 字段 = home icon 下显示的耗电倍率(isReal=false 等待安装 icon 不显示)
   type IconDef = { id: AppId; glyphClass: string; emoji: string; label: string; rate?: string; isReal: boolean };
   const ICONS: IconDef[] = [
-    { id: 'map',   glyphClass: 'map',    emoji: '🗺', label: 'MAP',   rate: '×2', isReal: true },
-    { id: 'radar', glyphClass: 'radar',  emoji: '📡', label: 'RADAR', rate: '×3', isReal: true },
-    { id: 'query', glyphClass: 'query',  emoji: '⚡', label: 'QUERY', rate: '×4', isReal: true },
+    { id: 'map',   glyphClass: 'map',    emoji: '🗺', label: 'MAP',   rate: `×${CONFIG.battery.appMult.MAP}`, isReal: true },
+    { id: 'radar', glyphClass: 'radar',  emoji: '📡', label: 'RADAR', rate: `×${CONFIG.battery.appMult.RADAR}`, isReal: true },
+    { id: 'query', glyphClass: 'query',  emoji: '⚡', label: 'QUERY', rate: `×${CONFIG.battery.appMult.QUERY}`, isReal: true },
     { id: 'home',  glyphClass: 'pending', emoji: '🐾', label: 'Pending Install', isReal: false },
   ];
 

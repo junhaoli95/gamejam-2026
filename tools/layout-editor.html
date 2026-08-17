@@ -1384,7 +1384,7 @@ async function probeServer() {
         signal: AbortSignal.timeout(300),
       })
         .then(r => (r.ok ? r.json() : null))
-        .then(j => (j && j.ok ? `http://localhost:${SERVER_BASE_PORT + i}` : null)),
+        .then(j => (j && j.ok && j.configSync ? `http://localhost:${SERVER_BASE_PORT + i}` : null)),
     ),
   );
   for (const result of results) {

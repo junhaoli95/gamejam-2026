@@ -164,9 +164,9 @@ mountGtaPrompt({
   getSharedState,
   objectiveText: CONFIG.hud.objectiveText,
   getActiveAppRate: () => {
-    if (runtime.appOpen.MAP) return 2;
-    if (runtime.appOpen.RADAR) return 3;
-    if (runtime.appOpen.QUERY) return 4;
+    if (runtime.appOpen.MAP) return CONFIG.battery.appMult.MAP;
+    if (runtime.appOpen.RADAR) return CONFIG.battery.appMult.RADAR;
+    if (runtime.appOpen.QUERY) return CONFIG.battery.appMult.QUERY;
     return 1;  // home / no app
   },
 });
